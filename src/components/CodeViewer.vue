@@ -33,17 +33,6 @@ const codeLines = reactive([]);
 // 每行的输出结果
 const lineOutputs = reactive({});
 
-// 创建模块缓存
-const moduleCache = {};
-
-// 预处理模块文件，提取模块名和内容
-Object.keys(moduleFiles).forEach(path => {
-  // 从路径中提取模块名
-  const moduleName = path.split('/').pop().replace('.js', '');
-  // 存储模块内容
-  moduleCache[moduleName] = moduleFiles[path];
-});
-
 // 获取文件内容
 const fetchFileContent = async (path) => {
   if (!path) return;
@@ -81,32 +70,122 @@ const fetchFileContent = async (path) => {
   }
 };
 
-// 处理代码行，识别console语句
+// 处理代码行，识别代码块
 const processCodeLines = () => {
   const lines = code.value.split('\n');
+  let inComment = false;
+  let commentStack = 0;
+  let codeBlocks = [];
 
-  lines.forEach((line, index) => {
-    const trimmedLine = line.trim();
-    const isConsole = trimmedLine.includes('console.log') ||
-                     trimmedLine.includes('console.error') ||
-                     trimmedLine.includes('console.warn') ||
-                     trimmedLine.includes('console.info');
+  // 检测Driver Code
+  let driverCodeIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes('Driver Code')) {
+      driverCodeIndex = i;
+      break;
+    }
+  }
+
+  if (driverCodeIndex !== -1) {
+    // 从Driver Code开始，识别每个代码块
+    let currentBlockStart = -1;
+    let isInBlock = false;
+
+    for (let i = driverCodeIndex + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      // 跳过空行
+      if (line === '') {
+        continue;
+      }
+
+      // 如果找到代码块注释标记（通常是 /* 某操作 */）
+      if (line.startsWith('/*') && line.endsWith('*/') && !line.includes('Driver Code')) {
+        // 结束前一个代码块（如果存在）
+        if (isInBlock && currentBlockStart !== -1) {
+          codeBlocks.push({
+            start: currentBlockStart,
+            end: i - 1
+          });
+        }
+
+        // 开始新代码块
+        currentBlockStart = i;
+        isInBlock = true;
+      }
+      // 如果已经在代码块中且遇到console输出后的下一个注释块，则结束当前代码块
+      else if (isInBlock && line.startsWith('/*') && line.endsWith('*/')) {
+        // 检查前面几行是否有console语句
+        let hasConsoleBeforeThisBlock = false;
+        for (let j = i - 1; j >= currentBlockStart && j >= i - 5; j--) {
+          if (lines[j].includes('console.')) {
+            hasConsoleBeforeThisBlock = true;
+            break;
+          }
+        }
+
+        if (hasConsoleBeforeThisBlock) {
+          // 结束当前代码块
+          codeBlocks.push({
+            start: currentBlockStart,
+            end: i - 1
+          });
+
+          // 开始新代码块
+          currentBlockStart = i;
+        }
+      }
+    }
+
+    // 添加最后一个代码块
+    if (isInBlock && currentBlockStart !== -1) {
+      codeBlocks.push({
+        start: currentBlockStart,
+        end: lines.length - 1
+      });
+    }
+  }
+
+  // 如果没有识别到代码块，将整个文件作为一个代码块
+  if (codeBlocks.length === 0) {
+    codeBlocks.push({
+      start: 0,
+      end: lines.length - 1
+    });
+  }
+
+  // 创建代码行对象
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let isBlockEnd = false;
+    let blockData = null;
+
+    // 检查当前行是否是某个代码块的结束行
+    for (const block of codeBlocks) {
+      if (i === block.end) {
+        isBlockEnd = true;
+        blockData = block;
+        break;
+      }
+    }
 
     codeLines.push({
-      index,
+      index: i,
       text: line,
-      isConsole
+      isCodeBlockEnd: isBlockEnd
     });
 
-    // 如果是console语句，初始化输出
-    if (isConsole) {
-      lineOutputs[index] = {
+    // 为代码块结束行添加输出对象
+    if (isBlockEnd && blockData) {
+      lineOutputs[i] = {
         logs: [],
-        status: '', // 可以是 'success', 'error', 或空字符串
-        loading: false
+        status: '',
+        loading: false,
+        blockStart: blockData.start,
+        blockEnd: blockData.end
       };
     }
-  });
+  }
 };
 
 // 获取代码行的高亮HTML
@@ -115,8 +194,8 @@ const getHighlightedLine = (line) => {
   return html;
 };
 
-// 运行单行代码
-const runSingleLine = async (lineNumber) => {
+// 运行代码块
+const runCodeBlock = async (lineNumber) => {
   if (isExecuting.value || !lineOutputs[lineNumber]) return;
 
   // 设置加载状态
@@ -127,8 +206,36 @@ const runSingleLine = async (lineNumber) => {
   isExecuting.value = true;
 
   try {
+    const blockStart = lineOutputs[lineNumber].blockStart;
+    const blockEnd = lineOutputs[lineNumber].blockEnd;
     const lines = code.value.split('\n');
-    const targetLine = lines[lineNumber];
+
+    // 获取代码块的内容
+    const blockLines = lines.slice(blockStart, blockEnd + 1);
+    const blockCode = blockLines.join('\n');
+
+    // 处理上下文：包含函数定义和前面代码块的变量操作，但忽略console语句
+    const contextLines = [];
+
+    // 添加当前代码块之前的所有代码行，但注释掉console语句
+    for (let i = 0; i < blockStart; i++) {
+      const line = lines[i];
+      const trimmedLine = line.trim();
+
+      // 检查是否是console语句
+      if (trimmedLine.includes('console.log') ||
+          trimmedLine.includes('console.error') ||
+          trimmedLine.includes('console.warn') ||
+          trimmedLine.includes('console.info')) {
+        // 将console语句注释掉
+        contextLines.push('// ' + line);
+      } else {
+        // 保留其他语句
+        contextLines.push(line);
+      }
+    }
+
+    const contextCode = contextLines.join('\n');
 
     // 保存原始的 console 方法
     const originalConsoleLog = console.log;
@@ -178,127 +285,126 @@ const runSingleLine = async (lineNumber) => {
       });
     };
 
-    // 创建必要的上下文代码，但移除前面的console语句
-    const previousLines = [];
-
-    // 只保留非console语句的代码，提供上下文
-    for (let i = 0; i < lineNumber; i++) {
-      const line = lines[i].trim();
-      const isConsole = line.includes('console.log') ||
-                        line.includes('console.error') ||
-                        line.includes('console.warn') ||
-                        line.includes('console.info');
-
-      // 只添加非console语句作为上下文
-      if (!isConsole) {
-        previousLines.push(lines[i]);
-      } else {
-        // 对于console语句，用注释替代以保持行号一致
-        previousLines.push(`// ${lines[i]}`);
-      }
-    }
-
-    const contextCode = previousLines.join('\n');
-
     // 执行代码
     try {
-      // 创建一个模拟的 require 函数
-      const mockRequire = (modulePath) => {
-        // 从路径中提取模块名
-        const moduleName = modulePath.includes('/')
-          ? modulePath.split('/').pop()
-          : modulePath;
+      // 准备模块数据
+      const moduleData = {};
+      Object.keys(moduleFiles).forEach(path => {
+        const moduleName = path.split('/').pop().replace('.js', '');
+        moduleData[moduleName] = moduleFiles[path];
+      });
 
-        // 如果模块缓存中有该模块
-        if (moduleCache[moduleName]) {
-          // 从模块内容创建模块
-          const moduleContent = moduleCache[moduleName];
-          const moduleExports = {};
-          const module = { exports: moduleExports };
-
-          // 执行模块代码
-          try {
-            const moduleFn = new Function('module', 'exports', 'require', moduleContent);
-            moduleFn(module, module.exports, mockRequire);
-            return module.exports;
-          } catch (error) {
-            console.error(`加载模块 ${moduleName} 失败: ${error.message}`);
-            return {};
-          }
-        }
-
-        // 模拟一些常用模块
-        switch (modulePath) {
-          case './ListNode':
-          case '../modules/ListNode':
-            return {
-              ListNode: class ListNode {
-                constructor(val, next = null) {
-                  this.val = val;
-                  this.next = next;
-                }
-              }
-            };
-          case './TreeNode':
-          case '../modules/TreeNode':
-            return {
-              TreeNode: class TreeNode {
-                constructor(val, left = null, right = null) {
-                  this.val = val;
-                  this.left = left;
-                  this.right = right;
-                }
-              }
-            };
-          case './PrintUtil':
-          case '../modules/PrintUtil':
-            return {
-              printLinkedList: (head) => {
-                let result = '';
-                let current = head;
-                while (current) {
-                  result += current.val + ' -> ';
-                  current = current.next;
-                }
-                return result + 'null';
-              },
-              printTree: (root) => {
-                return JSON.stringify(root, null, 2);
-              }
-            };
-          case './Vertex':
-          case '../modules/Vertex':
-            return {
-              Vertex: class Vertex {
-                constructor(val) {
-                  this.val = val;
-                  this.neighbors = [];
-                }
-
-                addNeighbor(vertex) {
-                  this.neighbors.push(vertex);
-                }
-              }
-            };
-          default:
-            console.warn(`模块 "${modulePath}" 未找到，返回空对象`);
-            return {};
-        }
-      };
-
-      const execCode = `
+      // 创建沙箱代码，保留前面的变量定义和操作，但不执行console
+      const sandboxCode = `
         (function() {
           "use strict";
-          // 模拟 require 函数
-          const require = ${mockRequire.toString()};
 
+          // 创建模块缓存
+          const moduleCache = ${JSON.stringify(moduleData)};
+
+          // 创建模拟的 require 函数
+          const require = function(modulePath) {
+            // 从路径中提取模块名
+            const moduleName = modulePath.includes('/')
+              ? modulePath.split('/').pop()
+              : modulePath;
+
+            // 如果模块缓存中有该模块
+            if (moduleCache[moduleName]) {
+              // 从模块内容创建模块
+              const moduleContent = moduleCache[moduleName];
+              const moduleExports = {};
+              const module = { exports: moduleExports };
+
+              // 执行模块代码
+              try {
+                const moduleFn = new Function('module', 'exports', 'require', moduleContent);
+                moduleFn(module, module.exports, require);
+                return module.exports;
+              } catch (error) {
+                console.error(\`加载模块 \${moduleName} 失败: \${error.message}\`);
+                return {};
+              }
+            }
+
+            // 模拟一些常用模块
+            switch (modulePath) {
+              case './ListNode':
+              case '../modules/ListNode':
+                return {
+                  ListNode: class ListNode {
+                    constructor(val, next = null) {
+                      this.val = val;
+                      this.next = next;
+                    }
+                  }
+                };
+              case './TreeNode':
+              case '../modules/TreeNode':
+                return {
+                  TreeNode: class TreeNode {
+                    constructor(val, left = null, right = null) {
+                      this.val = val;
+                      this.left = left;
+                      this.right = right;
+                    }
+                  }
+                };
+              case './PrintUtil':
+              case '../modules/PrintUtil':
+                return {
+                  printLinkedList: (head) => {
+                    let result = '';
+                    let current = head;
+                    while (current) {
+                      result += current.val + ' -> ';
+                      current = current.next;
+                    }
+                    console.log(result + 'null');
+                    return result + 'null';
+                  },
+                  printTree: (root) => {
+                    const result = JSON.stringify(root, null, 2);
+                    console.log(result);
+                    return result;
+                  },
+                  printHeap: (arr) => {
+                    console.log('堆的数组表示：');
+                    console.log(arr);
+                    console.log('堆的树状表示：');
+                    console.log(JSON.stringify(arr, null, 2));
+                  }
+                };
+              case './Vertex':
+              case '../modules/Vertex':
+                return {
+                  Vertex: class Vertex {
+                    constructor(val) {
+                      this.val = val;
+                      this.neighbors = [];
+                    }
+
+                    addNeighbor(vertex) {
+                      this.neighbors.push(vertex);
+                    }
+                  }
+                };
+              default:
+                console.warn(\`模块 "\${modulePath}" 未找到，返回空对象\`);
+                return {};
+            }
+          };
+
+          // 执行上下文代码，包含函数定义和前面的变量操作，但不执行console
           ${contextCode}
-          ${targetLine}
+
+          // 执行当前代码块
+          ${blockCode}
         })();
       `;
 
       // 使用 Function 构造器运行代码
-      new Function(execCode)();
+      new Function(sandboxCode)();
 
       // 设置成功状态
       lineOutputs[lineNumber].status = 'success';
@@ -385,97 +491,112 @@ const runCode = async () => {
 
     // 执行代码
     try {
-      // 创建一个模拟的 require 函数
-      const mockRequire = (modulePath) => {
-        // 从路径中提取模块名
-        const moduleName = modulePath.includes('/')
-          ? modulePath.split('/').pop()
-          : modulePath;
+      // 准备模块数据
+      const moduleData = {};
+      Object.keys(moduleFiles).forEach(path => {
+        const moduleName = path.split('/').pop().replace('.js', '');
+        moduleData[moduleName] = moduleFiles[path];
+      });
 
-        // 如果模块缓存中有该模块
-        if (moduleCache[moduleName]) {
-          // 从模块内容创建模块
-          const moduleContent = moduleCache[moduleName];
-          const moduleExports = {};
-          const module = { exports: moduleExports };
-
-          // 执行模块代码
-          try {
-            const moduleFn = new Function('module', 'exports', 'require', moduleContent);
-            moduleFn(module, module.exports, mockRequire);
-            return module.exports;
-          } catch (error) {
-            console.error(`加载模块 ${moduleName} 失败: ${error.message}`);
-            return {};
-          }
-        }
-
-        // 模拟一些常用模块
-        switch (modulePath) {
-          case './ListNode':
-          case '../modules/ListNode':
-            return {
-              ListNode: class ListNode {
-                constructor(val, next = null) {
-                  this.val = val;
-                  this.next = next;
-                }
-              }
-            };
-          case './TreeNode':
-          case '../modules/TreeNode':
-            return {
-              TreeNode: class TreeNode {
-                constructor(val, left = null, right = null) {
-                  this.val = val;
-                  this.left = left;
-                  this.right = right;
-                }
-              }
-            };
-          case './PrintUtil':
-          case '../modules/PrintUtil':
-            return {
-              printLinkedList: (head) => {
-                let result = '';
-                let current = head;
-                while (current) {
-                  result += current.val + ' -> ';
-                  current = current.next;
-                }
-                return result + 'null';
-              },
-              printTree: (root) => {
-                return JSON.stringify(root, null, 2);
-              }
-            };
-          case './Vertex':
-          case '../modules/Vertex':
-            return {
-              Vertex: class Vertex {
-                constructor(val) {
-                  this.val = val;
-                  this.neighbors = [];
-                }
-
-                addNeighbor(vertex) {
-                  this.neighbors.push(vertex);
-                }
-              }
-            };
-          default:
-            console.warn(`模块 "${modulePath}" 未找到，返回空对象`);
-            return {};
-        }
-      };
-
-      // 添加沙箱环境，避免修改全局变量
+      // 创建沙箱代码
       const sandboxCode = `
         (function() {
           "use strict";
-          // 模拟 require 函数
-          const require = ${mockRequire.toString()};
 
+          // 创建模块缓存
+          const moduleCache = ${JSON.stringify(moduleData)};
+
+          // 创建模拟的 require 函数
+          const require = function(modulePath) {
+            // 从路径中提取模块名
+            const moduleName = modulePath.includes('/')
+              ? modulePath.split('/').pop()
+              : modulePath;
+
+            // 如果模块缓存中有该模块
+            if (moduleCache[moduleName]) {
+              // 从模块内容创建模块
+              const moduleContent = moduleCache[moduleName];
+              const moduleExports = {};
+              const module = { exports: moduleExports };
+
+              // 执行模块代码
+              try {
+                const moduleFn = new Function('module', 'exports', 'require', moduleContent);
+                moduleFn(module, module.exports, require);
+                return module.exports;
+              } catch (error) {
+                console.error(\`加载模块 \${moduleName} 失败: \${error.message}\`);
+                return {};
+              }
+            }
+
+            // 模拟一些常用模块
+            switch (modulePath) {
+              case './ListNode':
+              case '../modules/ListNode':
+                return {
+                  ListNode: class ListNode {
+                    constructor(val, next = null) {
+                      this.val = val;
+                      this.next = next;
+                    }
+                  }
+                };
+              case './TreeNode':
+              case '../modules/TreeNode':
+                return {
+                  TreeNode: class TreeNode {
+                    constructor(val, left = null, right = null) {
+                      this.val = val;
+                      this.left = left;
+                      this.right = right;
+                    }
+                  }
+                };
+              case './PrintUtil':
+              case '../modules/PrintUtil':
+                return {
+                  printLinkedList: (head) => {
+                    let result = '';
+                    let current = head;
+                    while (current) {
+                      result += current.val + ' -> ';
+                      current = current.next;
+                    }
+                    return result + 'null';
+                  },
+                  printTree: (root) => {
+                    return JSON.stringify(root, null, 2);
+                  },
+                  printHeap: (arr) => {
+                    console.log('堆的数组表示：');
+                    console.log(arr);
+                    console.log('堆的树状表示：');
+                    console.log(JSON.stringify(arr, null, 2));
+                  }
+                };
+              case './Vertex':
+              case '../modules/Vertex':
+                return {
+                  Vertex: class Vertex {
+                    constructor(val) {
+                      this.val = val;
+                      this.neighbors = [];
+                    }
+
+                    addNeighbor(vertex) {
+                      this.neighbors.push(vertex);
+                    }
+                  }
+                };
+              default:
+                console.warn(\`模块 "\${modulePath}" 未找到，返回空对象\`);
+                return {};
+            }
+          };
+
+          // 执行代码
           ${code.value}
         })();
       `;
@@ -625,15 +746,15 @@ onMounted(() => {
             <span class="line-content" v-html="getHighlightedLine(line.text)"></span>
           </div>
 
-          <!-- 如果是console语句，添加运行框和输出区域 -->
-          <div v-if="line.isConsole" class="run-frame">
+          <!-- 如果是代码块结束行，添加运行框和输出区域 -->
+          <div v-if="line.isCodeBlockEnd" class="run-frame">
             <el-button
               class="run-line-btn"
               type="success"
               size="small"
               :loading="lineOutputs[line.index]?.loading"
-              @click="runSingleLine(line.index)">
-              运行这行
+              @click="runCodeBlock(line.index)">
+              运行此代码块
             </el-button>
 
             <div

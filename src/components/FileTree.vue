@@ -72,7 +72,72 @@ const fetchFileTree = async () => {
         { name: 'radix_sort.js', path: 'chapter_sorting/radix_sort.js', type: 'file' }
       ]
     },
-    // 其他章节目录...
+    {
+      name: 'chapter_tree',
+      path: 'chapter_tree',
+      type: 'folder',
+      children: [
+        { name: 'avl_tree.js', path: 'chapter_tree/avl_tree.js', type: 'file' },
+        { name: 'binary_search_tree.js', path: 'chapter_tree/binary_search_tree.js', type: 'file' },
+        { name: 'binary_tree_bfs.js', path: 'chapter_tree/binary_tree_bfs.js', type: 'file' },
+        { name: 'binary_tree_dfs.js', path: 'chapter_tree/binary_tree_dfs.js', type: 'file' },
+        { name: 'binary_tree.js', path: 'chapter_tree/binary_tree.js', type: 'file' }
+      ]
+    },
+    {
+      name: 'chapter_stack_and_queue',
+      path: 'chapter_stack_and_queue',
+      type: 'folder',
+      children: [
+        { name: 'array_deque.js', path: 'chapter_stack_and_queue/array_deque.js', type: 'file' },
+        { name: 'array_queue.js', path: 'chapter_stack_and_queue/array_queue.js', type: 'file' },
+        { name: 'array_stack.js', path: 'chapter_stack_and_queue/array_stack.js', type: 'file' },
+        { name: 'deque.js', path: 'chapter_stack_and_queue/deque.js', type: 'file' },
+        { name: 'linkedlist_deque.js', path: 'chapter_stack_and_queue/linkedlist_deque.js', type: 'file' },
+        { name: 'linkedlist_queue.js', path: 'chapter_stack_and_queue/linkedlist_queue.js', type: 'file' },
+        { name: 'linkedlist_stack.js', path: 'chapter_stack_and_queue/linkedlist_stack.js', type: 'file' },
+        { name: 'queue.js', path: 'chapter_stack_and_queue/queue.js', type: 'file' },
+        { name: 'stack.js', path: 'chapter_stack_and_queue/stack.js', type: 'file' }
+      ]
+    },
+    {
+      name: 'chapter_searching',
+      path: 'chapter_searching',
+      type: 'folder',
+      children: [
+        { name: 'hashing_search.js', path: 'chapter_searching/hashing_search.js', type: 'file' },
+        { name: 'leetcode_two_sum.js', path: 'chapter_searching/leetcode_two_sum.js', type: 'file' },
+        { name: 'linear_search.js', path: 'chapter_searching/linear_search.js', type: 'file' }
+      ]
+    },
+    {
+      name: 'chapter_heap',
+      path: 'chapter_heap',
+      type: 'folder',
+      children: [
+        { name: 'my_heap.js', path: 'chapter_heap/my_heap.js', type: 'file' }
+      ]
+    },
+    {
+      name: 'chapter_hashing',
+      path: 'chapter_hashing',
+      type: 'folder',
+      children: [
+        { name: 'array_hash_map.js', path: 'chapter_hashing/array_hash_map.js', type: 'file' },
+        { name: 'hash_map.js', path: 'chapter_hashing/hash_map.js', type: 'file' }
+      ]
+    },
+    {
+      name: 'modules',
+      path: 'modules',
+      type: 'folder',
+      children: [
+        { name: 'ListNode.js', path: 'modules/ListNode.js', type: 'file' },
+        { name: 'PrintUtil.js', path: 'modules/PrintUtil.js', type: 'file' },
+        { name: 'TreeNode.js', path: 'modules/TreeNode.js', type: 'file' },
+        { name: 'Vertex.js', path: 'modules/Vertex.js', type: 'file' }
+      ]
+    }
   ];
 
   fileTree.value = chaptersData;
