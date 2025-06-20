@@ -1083,14 +1083,14 @@ const initTooltips = () => {
             const popover = document.createElement('div');
             popover.className = 'custom-code-popover';
 
-            // 设置弹窗样式 - 比之前更大的尺寸
+            // 设置弹窗样式 - Dracula风格
             popover.style.cssText = `
               position: fixed;
               z-index: 9999;
               width: 700px;
               height: 600px;
-              background-color: #292D3E;
-              border: 1px solid rgba(255,255,255,0.1);
+              background-color: #282a36;
+              border: 1px solid #44475a;
               border-radius: 6px;
               box-shadow: 0 4px 25px rgba(0, 0, 0, 0.6);
               overflow: hidden;
@@ -1120,10 +1120,10 @@ const initTooltips = () => {
             popover.innerHTML = `
               <div style="
                 height: 40px;
-                background-color: #1b1e2b;
-                color: #82AAFF;
+                background-color: #282a36;
+                color: #50fa7b;
                 font-weight: bold;
-                border-bottom: 1px solid rgba(255,255,255,0.1);
+                border-bottom: 1px solid #44475a;
                 padding: 8px 12px;
                 font-size: 15px;
                 display: flex;
@@ -1133,8 +1133,8 @@ const initTooltips = () => {
                   margin-left: auto;
                   width: 24px;
                   height: 24px;
-                  border: 3px solid #676E95;
-                  border-top-color: #82AAFF;
+                  border: 3px solid #44475a;
+                  border-top-color: #50fa7b;
                   border-radius: 50%;
                   animation: popover-spinner 1s linear infinite;
                 "></div>
@@ -1149,8 +1149,8 @@ const initTooltips = () => {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                color: #A6ACCD;
-                background-color: #292D3E;
+                color: #f8f8f2;
+                background-color: #282a36;
                 font-size: 15px;
               ">加载函数定义中...</div>
             `;
@@ -1206,10 +1206,10 @@ const initTooltips = () => {
                 popover.innerHTML = `
                   <div style="
                     height: 40px;
-                    background-color: #1b1e2b;
-                    color: #FF5370;
+                    background-color: #282a36;
+                    color: #ff5555;
                     font-weight: bold;
-                    border-bottom: 1px solid rgba(255,255,255,0.1);
+                    border-bottom: 1px solid #44475a;
                     padding: 8px 12px;
                     font-size: 15px;
                   ">函数定义: ${escapeHtml(funcName)}</div>
@@ -1218,8 +1218,8 @@ const initTooltips = () => {
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    color: #A6ACCD;
-                    background-color: #292D3E;
+                    color: #f8f8f2;
+                    background-color: #282a36;
                   ">未找到函数定义</div>
                 `;
               }
@@ -1290,32 +1290,32 @@ const generateCodeDisplay = (codeContent, funcName) => {
       ? [...highlightedLines.slice(0, 50), '<span class="token comment">// ...(省略部分内容)</span>']
       : highlightedLines;
 
-    // 添加内联样式，确保代码高亮有正确颜色
+    // 添加内联样式，确保代码高亮有正确颜色 - Dracula风格
     const codeStyles = `
       <style>
-        .custom-code-popover .token.comment { color: #676E95; }
-        .custom-code-popover .token.keyword { color: #C792EA; }
-        .custom-code-popover .token.string { color: #C3E88D; }
-        .custom-code-popover .token.function { color: #82AAFF; }
-        .custom-code-popover .token.number { color: #F78C6C; }
-        .custom-code-popover .token.operator { color: #89DDFF; }
-        .custom-code-popover .token.punctuation { color: #89DDFF; }
-        .custom-code-popover .token.parameter { color: #7FDBCA; }
-        .custom-code-popover .token.class-name { color: #FFCB6B; }
-        .custom-code-popover .token.boolean { color: #FF5370; }
-        .custom-code-popover .token.property { color: #80CBC4; }
+        .custom-code-popover .token.comment { color: #6272a4; }
+        .custom-code-popover .token.keyword { color: #f38c3e; }
+        .custom-code-popover .token.string { color: #f1fa8c; }
+        .custom-code-popover .token.function { color: #50fa7b; }
+        .custom-code-popover .token.number { color: #bd93f9; }
+        .custom-code-popover .token.operator { color: #8be9fd; }
+        .custom-code-popover .token.punctuation { color: #f8f8f2; }
+        .custom-code-popover .token.parameter { color: #ffb86c; }
+        .custom-code-popover .token.class-name { color: #8be9fd; }
+        .custom-code-popover .token.boolean { color: #bd93f9; }
+        .custom-code-popover .token.property { color: #8be9fd; }
       </style>
     `;
 
-    // 构建HTML - 使用更大的高亮版本
+    // 构建HTML - Dracula风格
     return `
       ${codeStyles}
       <div style="
         height: 40px;
-        background-color: #1b1e2b;
-        color: #82AAFF;
+        background-color: #282a36;
+        color: #50fa7b;
         font-weight: bold;
-        border-bottom: 1px solid rgba(255,255,255,0.1);
+        border-bottom: 1px solid #44475a;
         padding: 8px 12px;
         font-size: 15px;
         display: flex;

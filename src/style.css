@@ -191,24 +191,24 @@ button:focus-visible {
   box-shadow: 0 2px 4px rgba(130, 170, 255, 0.2);
 }
 
-/* 悬浮函数定义的弹窗样式 - Material Palenight 风格 */
-.custom-code-popover .token.comment { color: #676E95; }
-.custom-code-popover .token.keyword { color: #C792EA; }
-.custom-code-popover .token.string { color: #C3E88D; }
-.custom-code-popover .token.function { color: #82AAFF; }
-.custom-code-popover .token.number { color: #F78C6C; }
-.custom-code-popover .token.operator { color: #89DDFF; }
-.custom-code-popover .token.punctuation { color: #89DDFF; }
-.custom-code-popover .token.parameter { color: #7FDBCA; }
-.custom-code-popover .token.class-name { color: #FFCB6B; }
-.custom-code-popover .token.boolean { color: #FF5370; }
-.custom-code-popover .token.property { color: #80CBC4; }
-.custom-code-popover .token.regex { color: #80CBC4; }
-.custom-code-popover .token.tag { color: #FF5370; }
-.custom-code-popover .token.selector { color: #C792EA; }
-.custom-code-popover .token.attr-name { color: #FFCB6B; }
-.custom-code-popover .token.attr-value { color: #C3E88D; }
-.custom-code-popover .token.entity { color: #82AAFF; }
+/* 悬浮函数定义的弹窗样式 - Dracula 风格 */
+.custom-code-popover .token.comment { color: #6272a4; }
+.custom-code-popover .token.keyword { color: #f38c3e; }
+.custom-code-popover .token.string { color: #f1fa8c; }
+.custom-code-popover .token.function { color: #50fa7b; }
+.custom-code-popover .token.number { color: #bd93f9; }
+.custom-code-popover .token.operator { color: #8be9fd; }
+.custom-code-popover .token.punctuation { color: #f8f8f2; }
+.custom-code-popover .token.parameter { color: #ffb86c; }
+.custom-code-popover .token.class-name { color: #8be9fd; }
+.custom-code-popover .token.boolean { color: #bd93f9; }
+.custom-code-popover .token.property { color: #8be9fd; }
+.custom-code-popover .token.regex { color: #50fa7b; }
+.custom-code-popover .token.tag { color: #f38c3e; }
+.custom-code-popover .token.selector { color: #50fa7b; }
+.custom-code-popover .token.attr-name { color: #ffb86c; }
+.custom-code-popover .token.attr-value { color: #f1fa8c; }
+.custom-code-popover .token.entity { color: #8be9fd; }
 
 /* 增加弹窗大小和增强UI */
 .custom-code-popover {
