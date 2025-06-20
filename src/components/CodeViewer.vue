@@ -330,7 +330,38 @@ const stripHtml = (html) => {
 const getHighlightedLine = (line) => {
   try {
     // 使用Prism进行基本的语法高亮
-    const html = Prism.highlight(line, Prism.languages.javascript, 'javascript');
+    let html = Prism.highlight(line, Prism.languages.javascript, 'javascript');
+
+    // 增强高亮: 为特定模式添加额外样式
+    // 1. 强调函数定义
+    html = html.replace(
+      /(function\s+)([a-zA-Z_$][a-zA-Z0-9_$]*)/g,
+      '$1<span class="token function-definition">$2</span>'
+    );
+
+    // 2. 强调类定义和类方法
+    html = html.replace(
+      /(class\s+)([a-zA-Z_$][a-zA-Z0-9_$]*)/g,
+      '$1<span class="token class-definition">$2</span>'
+    );
+
+    // 3. 高亮this关键字
+    html = html.replace(
+      /\b(this)\b/g,
+      '<span class="token this-keyword">$1</span>'
+    );
+
+    // 4. 强调console方法
+    html = html.replace(
+      /(console\.)(log|error|warn|info)/g,
+      '<span class="token console">$1</span><span class="token console-method">$2</span>'
+    );
+
+    // 5. 增强注释可读性
+    html = html.replace(
+      /(<span class="token comment">.*?<\/span>)/g,
+      '<span class="enhanced-comment">$1</span>'
+    );
 
     // 返回高亮后的HTML
     return html;
@@ -1052,53 +1083,76 @@ const initTooltips = () => {
             const popover = document.createElement('div');
             popover.className = 'custom-code-popover';
 
-            // 设置弹窗样式 - 强制方块形状
+            // 设置弹窗样式 - 比之前更大的尺寸
             popover.style.cssText = `
               position: fixed;
               z-index: 9999;
-              width: 500px;
-              height: 500px;
-              background-color: #282a36;
-              border: 1px solid #414558;
+              width: 700px;
+              height: 600px;
+              background-color: #292D3E;
+              border: 1px solid rgba(255,255,255,0.1);
               border-radius: 6px;
-              box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+              box-shadow: 0 4px 25px rgba(0, 0, 0, 0.6);
               overflow: hidden;
               display: flex;
               flex-direction: column;
-              aspect-ratio: 1 / 1;
+              font-family: 'Operator Mono', 'SF Mono', 'Source Code Pro', monospace;
             `;
 
-            // 计算位置 - 调整尺寸为500px
-            let topPos = rect.top - 510; // 向上增加空间
-            let leftPos = rect.left;
+            // 计算位置 - 使用更大的尺寸
+            let topPos = rect.top - 610; // 向上增加空间，考虑更大尺寸
+            let leftPos = Math.max(10, rect.left - 200); // 左移，增加左侧空间
 
             // 调整位置避免超出视口
-            if (topPos < 10) topPos = rect.bottom + 10;
-            if (leftPos + 500 > window.innerWidth) leftPos = window.innerWidth - 510;
-            if (leftPos < 10) leftPos = 10;
+            if (topPos < 10) topPos = Math.min(window.innerHeight - 610, rect.bottom + 10);
+            if (leftPos + 700 > window.innerWidth) leftPos = window.innerWidth - 710;
 
-            // 设置位置
+            // 如果弹窗放不下，则缩小尺寸适应屏幕
+            const maxHeight = window.innerHeight - 20;
+            const height = Math.min(600, maxHeight);
+
+            // 设置位置和大小
             popover.style.top = `${topPos}px`;
             popover.style.left = `${leftPos}px`;
+            popover.style.height = `${height}px`;
 
             // 创建加载中内容
             popover.innerHTML = `
               <div style="
-                height: 36px;
-                background-color: #1d1e27;
-                color: #50fa7b;
+                height: 40px;
+                background-color: #1b1e2b;
+                color: #82AAFF;
                 font-weight: bold;
-                border-bottom: 1px solid #414558;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
                 padding: 8px 12px;
-                font-size: 14px;
-              ">函数定义: ${escapeHtml(funcName)}</div>
+                font-size: 15px;
+                display: flex;
+                align-items: center;
+              ">函数定义: ${escapeHtml(funcName)}
+                <div style="
+                  margin-left: auto;
+                  width: 24px;
+                  height: 24px;
+                  border: 3px solid #676E95;
+                  border-top-color: #82AAFF;
+                  border-radius: 50%;
+                  animation: popover-spinner 1s linear infinite;
+                "></div>
+                <style>
+                  @keyframes popover-spinner {
+                    to { transform: rotate(360deg); }
+                  }
+                </style>
+              </div>
               <div style="
                 flex: 1;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                color: #f8f8f2;
-              ">加载中...</div>
+                color: #A6ACCD;
+                background-color: #292D3E;
+                font-size: 15px;
+              ">加载函数定义中...</div>
             `;
 
             // 添加到DOM
@@ -1115,10 +1169,16 @@ const initTooltips = () => {
                 return;
               }
 
-              // 删除弹窗
-              if (document.body.contains(popover)) {
-                document.body.removeChild(popover);
-              }
+              // 添加过渡动画
+              popover.style.transition = 'opacity 0.2s ease-out';
+              popover.style.opacity = '0';
+
+              // 延迟删除弹窗
+              setTimeout(() => {
+                if (document.body.contains(popover)) {
+                  document.body.removeChild(popover);
+                }
+              }, 200);
 
               // 移除事件监听
               el.removeEventListener('mouseleave', handleMouseLeave);
@@ -1132,27 +1192,34 @@ const initTooltips = () => {
             // 异步加载函数定义
             findFunctionDefinition(funcName).then(definitionCode => {
               if (document.body.contains(popover)) {
+                // 渐入效果
+                popover.style.opacity = '0';
                 popover.innerHTML = generateCodeDisplay(definitionCode, funcName);
+                setTimeout(() => {
+                  popover.style.transition = 'opacity 0.3s ease-in';
+                  popover.style.opacity = '1';
+                }, 10);
               }
             }).catch(error => {
               console.error('加载函数定义失败:', error);
               if (document.body.contains(popover)) {
                 popover.innerHTML = `
                   <div style="
-                    height: 36px;
-                    background-color: #1d1e27;
-                    color: #50fa7b;
+                    height: 40px;
+                    background-color: #1b1e2b;
+                    color: #FF5370;
                     font-weight: bold;
-                    border-bottom: 1px solid #414558;
+                    border-bottom: 1px solid rgba(255,255,255,0.1);
                     padding: 8px 12px;
-                    font-size: 14px;
+                    font-size: 15px;
                   ">函数定义: ${escapeHtml(funcName)}</div>
                   <div style="
                     flex: 1;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    color: #f8f8f2;
+                    color: #A6ACCD;
+                    background-color: #292D3E;
                   ">未找到函数定义</div>
                 `;
               }
@@ -1176,8 +1243,8 @@ const initTooltips = () => {
 const generateCodeDisplay = (codeContent, funcName) => {
   // 整理代码内容
   let content = codeContent || '函数定义未找到';
-  if (content.length > 5000) {
-    content = content.substring(0, 5000) + '...(省略部分内容)';
+  if (content.length > 10000) {
+    content = content.substring(0, 10000) + '...(省略部分内容)';
   }
 
   // 分行处理
@@ -1186,7 +1253,7 @@ const generateCodeDisplay = (codeContent, funcName) => {
   // 查找函数签名行
   let functionSignature = '';
   if (codeLines.length > 0) {
-    for (let i = 0; i < Math.min(5, codeLines.length); i++) {
+    for (let i = 0; i < Math.min(8, codeLines.length); i++) {
       if (codeLines[i].includes(`function ${funcName}`) ||
           codeLines[i].includes(`${funcName} =`) ||
           codeLines[i].includes(`${funcName}(`)) {
@@ -1201,16 +1268,10 @@ const generateCodeDisplay = (codeContent, funcName) => {
     }
   }
 
-  // 限制行数使其方形显示，但增加行数以显示更多内容
-  const displayLines = codeLines.length > 20
-    ? [...codeLines.slice(0, 20), '...(省略部分内容)']
+  // 不限制行数，但限制总长度
+  const displayLines = codeLines.length > 50
+    ? [...codeLines.slice(0, 50), '...(省略部分内容)']
     : codeLines;
-
-  // 限制每行长度 - 增加到60个字符，显示更多内容
-  const formattedLines = displayLines.map(line => {
-    if (line.length <= 60) return escapeHtml(line);
-    return escapeHtml(line.substring(0, 60) + '...');
-  });
 
   // 使用Prism进行代码高亮处理
   try {
@@ -1224,50 +1285,54 @@ const generateCodeDisplay = (codeContent, funcName) => {
     // 按行分割高亮后的代码
     const highlightedLines = highlightedCode.split('\n');
 
-    // 提取前20行
-    const displayHighlightedLines = codeLines.length > 20
-      ? [...highlightedLines.slice(0, 20), '<span class="token comment">// ...(省略部分内容)</span>']
+    // 显示更多行
+    const displayHighlightedLines = codeLines.length > 50
+      ? [...highlightedLines.slice(0, 50), '<span class="token comment">// ...(省略部分内容)</span>']
       : highlightedLines;
 
     // 添加内联样式，确保代码高亮有正确颜色
     const codeStyles = `
       <style>
-        .token.comment { color: #6272a4; }
-        .token.keyword { color: #ff79c6; }
-        .token.string { color: #f1fa8c; }
-        .token.function { color: #50fa7b; }
-        .token.number { color: #bd93f9; }
-        .token.operator { color: #ff79c6; }
-        .token.punctuation { color: #f8f8f2; }
-        .token.parameter { color: #ffb86c; }
-        .token.class-name { color: #8be9fd; }
-        .token.boolean { color: #bd93f9; }
+        .custom-code-popover .token.comment { color: #676E95; }
+        .custom-code-popover .token.keyword { color: #C792EA; }
+        .custom-code-popover .token.string { color: #C3E88D; }
+        .custom-code-popover .token.function { color: #82AAFF; }
+        .custom-code-popover .token.number { color: #F78C6C; }
+        .custom-code-popover .token.operator { color: #89DDFF; }
+        .custom-code-popover .token.punctuation { color: #89DDFF; }
+        .custom-code-popover .token.parameter { color: #7FDBCA; }
+        .custom-code-popover .token.class-name { color: #FFCB6B; }
+        .custom-code-popover .token.boolean { color: #FF5370; }
+        .custom-code-popover .token.property { color: #80CBC4; }
       </style>
     `;
 
-    // 构建HTML - 使用高亮版本
+    // 构建HTML - 使用更大的高亮版本
     return `
       ${codeStyles}
       <div style="
-        height: 36px;
-        background-color: #1d1e27;
-        color: #50fa7b;
+        height: 40px;
+        background-color: #1b1e2b;
+        color: #82AAFF;
         font-weight: bold;
-        border-bottom: 1px solid #414558;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
         padding: 8px 12px;
-        font-size: 14px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      ">函数定义: ${escapeHtml(funcName || '')}</div>
+        font-size: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      ">
+        <span>函数定义: ${escapeHtml(funcName || '')}</span>
+        <span style="font-size: 13px; color: #676E95; font-style: italic;">点击函数名跳转到定义</span>
+      </div>
 
       <div style="
-        padding: 8px 12px;
-        background-color: #2a2a2a;
-        color: #ff79c6;
-        font-family: monospace;
+        padding: 10px 12px;
+        background-color: #292D3E;
+        color: #C792EA;
+        font-family: 'Operator Mono', 'SF Mono', 'Source Code Pro', monospace;
         font-weight: bold;
-        border-bottom: 1px solid #414558;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1278,6 +1343,8 @@ const generateCodeDisplay = (codeContent, funcName) => {
         overflow-y: auto;
         display: flex;
         flex-direction: column;
+        background-color: #292D3E;
+        height: calc(100% - 81px);
       ">
         <div style="
           overflow-x: auto;
@@ -1287,25 +1354,30 @@ const generateCodeDisplay = (codeContent, funcName) => {
           ${displayHighlightedLines.map((line, index) => `
             <div style="
               display: flex;
-              border-bottom: 1px solid rgba(65, 69, 88, 0.1);
+              border-bottom: 1px solid rgba(255,255,255,0.03);
             ">
               <span style="
-                width: 40px;
+                width: 50px;
                 flex-shrink: 0;
                 text-align: right;
-                padding-right: 8px;
-                padding-left: 4px;
-                background-color: #252733;
-                color: #6272a4;
-                border-right: 1px solid #414558;
+                padding-right: 12px;
+                padding-left: 8px;
+                background-color: #242837;
+                color: #676E95;
+                border-right: 1px solid rgba(255,255,255,0.05);
                 user-select: none;
+                font-family: 'SF Mono', 'JetBrains Mono', monospace;
+                font-size: 14px;
               ">${index + 1}</span>
               <span style="
-                padding-left: 8px;
-                padding-right: 8px;
-                color: #f8f8f2;
+                padding-left: 12px;
+                padding-right: 12px;
+                color: #A6ACCD;
                 white-space: pre;
-                min-width: 400px;
+                min-width: 600px;
+                font-family: 'Operator Mono', 'SF Mono', 'Source Code Pro', monospace;
+                font-size: 15px;
+                line-height: 1.6;
               ">${line}</span>
             </div>
           `).join('')}
@@ -1316,28 +1388,25 @@ const generateCodeDisplay = (codeContent, funcName) => {
     // 如果高亮处理失败，回退到原始版本
     console.error('代码高亮处理失败', e);
 
-    // 构建HTML - 原始版本
+    // 构建HTML - 原始版本但尺寸更大
     return `
       <div style="
-        height: 36px;
-        background-color: #1d1e27;
-        color: #50fa7b;
+        height: 40px;
+        background-color: #1b1e2b;
+        color: #82AAFF;
         font-weight: bold;
-        border-bottom: 1px solid #414558;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
         padding: 8px 12px;
-        font-size: 14px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        font-size: 15px;
       ">函数定义: ${escapeHtml(funcName || '')}</div>
 
       <div style="
-        padding: 8px 12px;
-        background-color: #2a2a2a;
-        color: #ff79c6;
-        font-family: monospace;
+        padding: 10px 12px;
+        background-color: #292D3E;
+        color: #C792EA;
+        font-family: 'Operator Mono', 'SF Mono', 'Source Code Pro', monospace;
         font-weight: bold;
-        border-bottom: 1px solid #414558;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1348,34 +1417,41 @@ const generateCodeDisplay = (codeContent, funcName) => {
         overflow-y: auto;
         display: flex;
         flex-direction: column;
+        height: calc(100% - 81px);
       ">
         <div style="
           overflow-x: auto;
           width: 100%;
           position: relative;
+          background-color: #292D3E;
         ">
-          ${formattedLines.map((line, index) => `
+          ${displayLines.map((line, index) => `
             <div style="
               display: flex;
-              border-bottom: 1px solid rgba(65, 69, 88, 0.1);
+              border-bottom: 1px solid rgba(255,255,255,0.03);
             ">
               <span style="
-                width: 40px;
+                width: 50px;
                 text-align: right;
-                padding-right: 8px;
-                padding-left: 4px;
-                background-color: #252733;
-                color: #6272a4;
-                border-right: 1px solid #414558;
+                padding-right: 12px;
+                padding-left: 8px;
+                background-color: #242837;
+                color: #676E95;
+                border-right: 1px solid rgba(255,255,255,0.05);
                 user-select: none;
+                font-family: 'SF Mono', 'JetBrains Mono', monospace;
+                font-size: 14px;
               ">${index + 1}</span>
               <span style="
-                padding-left: 8px;
-                padding-right: 8px;
-                color: #f8f8f2;
+                padding-left: 12px;
+                padding-right: 12px;
+                color: #A6ACCD;
                 white-space: pre;
-                min-width: 400px;
-              ">${line}</span>
+                min-width: 600px;
+                font-family: 'Operator Mono', 'SF Mono', 'Source Code Pro', monospace;
+                font-size: 15px;
+                line-height: 1.6;
+              ">${escapeHtml(line)}</span>
             </div>
           `).join('')}
         </div>
@@ -1470,6 +1546,9 @@ onMounted(() => {
 
     <div class="code-container" v-loading="isLoading">
       <div v-if="codeLines.length > 0" class="code-content">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=SF+Mono:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
         <!-- 逐行渲染代码 -->
         <div v-for="line in codeLines" :key="line.index" class="code-line-wrapper">
           <!-- 代码行 -->

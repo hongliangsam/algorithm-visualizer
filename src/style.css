@@ -69,6 +69,163 @@ button:focus-visible {
   text-align: left;
 }
 
+/* 默认代码高亮样式 - 高级VSCode风格 */
+.code-content {
+  font-size: 16px !important;
+  font-family: 'Operator Mono', 'SF Mono', 'Consolas', 'Monaco', 'Menlo', monospace !important;
+  line-height: 1.7 !important;
+  letter-spacing: 0.05em;
+}
+
+.code-line {
+  padding: 3px 0;
+}
+
+.line-number {
+  font-size: 14px;
+  color: #637777 !important;
+  padding-right: 1.8em !important;
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+
+/* Night Owl 风格的代码高亮 */
+.token.comment { color: #637777; font-style: italic; }
+.token.keyword { color: #c792ea; font-weight: 500; }
+.token.string { color: #ecc48d; }
+.token.function { color: #82aaff; }
+.token.number { color: #f78c6c; }
+.token.operator { color: #c792ea; }
+.token.punctuation { color: #7fdbca; }
+.token.parameter { color: #7fdbca; }
+.token.class-name { color: #ffcb8b; font-weight: 500; }
+.token.boolean { color: #ff5874; font-weight: 500; }
+.token.property { color: #80cbc4; }
+.token.regex { color: #80CBC4; }
+.token.tag { color: #7fdbca; }
+.token.selector { color: #ff5874; }
+.token.attr-name { color: #80CBC4; }
+.token.attr-value { color: #ecc48d; }
+.token.entity { color: #82aaff; }
+
+/* 增强高亮元素 */
+.token.function-definition {
+  color: #82aaff !important;
+  font-weight: bold;
+  text-decoration: underline;
+  text-decoration-color: rgba(130, 170, 255, 0.5);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.token.class-definition {
+  color: #ffcb8b !important;
+  font-weight: bold;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 203, 139, 0.5);
+  text-decoration-style: double;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.token.this-keyword {
+  color: #ff5874 !important;
+  font-style: italic;
+  font-weight: bold;
+}
+
+.token.console {
+  color: #7fdbca !important;
+}
+
+.token.console-method {
+  color: #82aaff !important;
+}
+
+.enhanced-comment {
+  opacity: 0.8;
+  font-style: italic;
+  font-family: 'Operator Mono', 'SF Mono', monospace;
+}
+
+.enhanced-comment:hover {
+  opacity: 1;
+  color: #82aaff;
+}
+
+/* 增强代码可读性 */
+.code-content {
+  background-color: #011627 !important;
+  padding: 16px !important;
+  border-radius: 8px;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5) !important;
+}
+
+.code-line {
+  background-color: #011627;
+  transition: background-color 0.3s;
+}
+
+.code-line:hover {
+  background-color: #0e2c45;
+}
+
+/* 函数调用高亮 */
+.function-call-highlight {
+  color: #82aaff !important;
+  cursor: pointer;
+  font-weight: bold;
+  padding: 0 3px;
+  border-radius: 3px;
+  transition: all 0.3s ease;
+  border-bottom: 1px dashed #82aaff;
+  position: relative;
+  text-decoration: none;
+  outline: none;
+}
+
+.function-call-highlight:hover,
+.function-call-highlight:focus {
+  color: #adcbff !important;
+  background-color: rgba(130, 170, 255, 0.15);
+  border-bottom: 1px solid #adcbff;
+  box-shadow: 0 2px 4px rgba(130, 170, 255, 0.2);
+}
+
+/* 悬浮函数定义的弹窗样式 - Material Palenight 风格 */
+.custom-code-popover .token.comment { color: #676E95; }
+.custom-code-popover .token.keyword { color: #C792EA; }
+.custom-code-popover .token.string { color: #C3E88D; }
+.custom-code-popover .token.function { color: #82AAFF; }
+.custom-code-popover .token.number { color: #F78C6C; }
+.custom-code-popover .token.operator { color: #89DDFF; }
+.custom-code-popover .token.punctuation { color: #89DDFF; }
+.custom-code-popover .token.parameter { color: #7FDBCA; }
+.custom-code-popover .token.class-name { color: #FFCB6B; }
+.custom-code-popover .token.boolean { color: #FF5370; }
+.custom-code-popover .token.property { color: #80CBC4; }
+.custom-code-popover .token.regex { color: #80CBC4; }
+.custom-code-popover .token.tag { color: #FF5370; }
+.custom-code-popover .token.selector { color: #C792EA; }
+.custom-code-popover .token.attr-name { color: #FFCB6B; }
+.custom-code-popover .token.attr-value { color: #C3E88D; }
+.custom-code-popover .token.entity { color: #82AAFF; }
+
+/* 增加弹窗大小和增强UI */
+.custom-code-popover {
+  width: 700px !important;
+  height: 600px !important;
+  max-width: 90vw !important;
+  max-height: 80vh !important;
+  font-size: 16px !important;
+}
+
+.custom-code-popover .line-content {
+  font-family: 'Operator Mono', 'SF Mono', 'Consolas', 'Monaco', 'Menlo', monospace !important;
+  font-size: 15px !important;
+  line-height: 1.6 !important;
+  letter-spacing: 0.03em;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
