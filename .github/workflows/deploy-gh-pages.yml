@@ -29,6 +29,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Install terser
+        run: pnpm add -D terser
+
       - name: Build
         run: pnpm build
 
