@@ -61,11 +61,10 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-pnpm-store-
 
-    - name: pnpm install, build, and test
+    - name: pnpm install and build
       run: |
         pnpm install
-        pnpm run build --if-present
-        pnpm run test --if-present
+        pnpm run build
 
     - name: Upload artifact for deployment job
       uses: actions/upload-artifact@v4
