@@ -1252,12 +1252,14 @@ const generateCodeDisplay = (codeContent, funcName) => {
 
   // 查找函数签名行
   let functionSignature = '';
+  let signatureLineIndex = -1;
   if (codeLines.length > 0) {
     for (let i = 0; i < Math.min(8, codeLines.length); i++) {
       if (codeLines[i].includes(`function ${funcName}`) ||
           codeLines[i].includes(`${funcName} =`) ||
           codeLines[i].includes(`${funcName}(`)) {
         functionSignature = codeLines[i];
+        signatureLineIndex = i;
         break;
       }
     }
@@ -1265,6 +1267,7 @@ const generateCodeDisplay = (codeContent, funcName) => {
     // 如果没找到，使用第一行
     if (!functionSignature) {
       functionSignature = codeLines[0];
+      signatureLineIndex = 0;
     }
   }
 
@@ -1307,6 +1310,11 @@ const generateCodeDisplay = (codeContent, funcName) => {
       </style>
     `;
 
+    // 提取函数参数
+    let paramsMatch = functionSignature.match(/\(([^)]*)\)/);
+    let params = paramsMatch ? paramsMatch[1].split(',').map(p => p.trim()).filter(Boolean) : [];
+    let formattedParams = params.length > 0 ? params.join(', ') : '';
+
     // 构建HTML - Dracula风格
     return `
       ${codeStyles}
@@ -1322,29 +1330,17 @@ const generateCodeDisplay = (codeContent, funcName) => {
         align-items: center;
         justify-content: space-between;
       ">
-        <span>函数定义: ${escapeHtml(funcName || '')}</span>
-        <span style="font-size: 13px; color: #676E95; font-style: italic;">点击函数名跳转到定义</span>
+        <span>函数: <span style="color: #8be9fd;">${escapeHtml(funcName || '')}</span>(<span style="color: #ffb86c;">${escapeHtml(formattedParams)}</span>)</span>
+        <span style="font-size: 13px; color: #6272a4; font-style: italic;">点击函数名跳转到定义</span>
       </div>
-
-      <div style="
-        padding: 10px 12px;
-        background-color: #292D3E;
-        color: #C792EA;
-        font-family: 'Operator Mono', 'SF Mono', 'Source Code Pro', monospace;
-        font-weight: bold;
-        border-bottom: 1px solid rgba(255,255,255,0.06);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      ">${escapeHtml(functionSignature)}</div>
 
       <div style="
         flex: 1;
         overflow-y: auto;
         display: flex;
         flex-direction: column;
-        background-color: #292D3E;
-        height: calc(100% - 81px);
+        background-color: #282a36;
+        height: calc(100% - 40px);
       ">
         <div style="
           overflow-x: auto;
@@ -1354,7 +1350,8 @@ const generateCodeDisplay = (codeContent, funcName) => {
           ${displayHighlightedLines.map((line, index) => `
             <div style="
               display: flex;
-              border-bottom: 1px solid rgba(255,255,255,0.03);
+              border-bottom: 1px solid rgba(68, 71, 90, 0.3);
+              ${index === signatureLineIndex ? 'background-color: rgba(80, 250, 123, 0.07);' : ''}
             ">
               <span style="
                 width: 50px;
@@ -1362,9 +1359,9 @@ const generateCodeDisplay = (codeContent, funcName) => {
                 text-align: right;
                 padding-right: 12px;
                 padding-left: 8px;
-                background-color: #242837;
-                color: #676E95;
-                border-right: 1px solid rgba(255,255,255,0.05);
+                background-color: #21222c;
+                color: #6272a4;
+                border-right: 1px solid #44475a;
                 user-select: none;
                 font-family: 'SF Mono', 'JetBrains Mono', monospace;
                 font-size: 14px;
@@ -1372,7 +1369,7 @@ const generateCodeDisplay = (codeContent, funcName) => {
               <span style="
                 padding-left: 12px;
                 padding-right: 12px;
-                color: #A6ACCD;
+                color: #f8f8f2;
                 white-space: pre;
                 min-width: 600px;
                 font-family: 'Operator Mono', 'SF Mono', 'Source Code Pro', monospace;
@@ -1388,56 +1385,45 @@ const generateCodeDisplay = (codeContent, funcName) => {
     // 如果高亮处理失败，回退到原始版本
     console.error('代码高亮处理失败', e);
 
-    // 构建HTML - 原始版本但尺寸更大
+    // 构建HTML - Dracula风格
     return `
       <div style="
         height: 40px;
-        background-color: #1b1e2b;
-        color: #82AAFF;
+        background-color: #282a36;
+        color: #50fa7b;
         font-weight: bold;
-        border-bottom: 1px solid rgba(255,255,255,0.1);
+        border-bottom: 1px solid #44475a;
         padding: 8px 12px;
         font-size: 15px;
-      ">函数定义: ${escapeHtml(funcName || '')}</div>
-
-      <div style="
-        padding: 10px 12px;
-        background-color: #292D3E;
-        color: #C792EA;
-        font-family: 'Operator Mono', 'SF Mono', 'Source Code Pro', monospace;
-        font-weight: bold;
-        border-bottom: 1px solid rgba(255,255,255,0.06);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      ">${escapeHtml(functionSignature)}</div>
+      ">函数: <span style="color: #8be9fd;">${escapeHtml(funcName || '')}</span></div>
 
       <div style="
         flex: 1;
         overflow-y: auto;
         display: flex;
         flex-direction: column;
-        height: calc(100% - 81px);
+        height: calc(100% - 40px);
       ">
         <div style="
           overflow-x: auto;
           width: 100%;
           position: relative;
-          background-color: #292D3E;
+          background-color: #282a36;
         ">
           ${displayLines.map((line, index) => `
             <div style="
               display: flex;
-              border-bottom: 1px solid rgba(255,255,255,0.03);
+              border-bottom: 1px solid rgba(68, 71, 90, 0.3);
+              ${index === signatureLineIndex ? 'background-color: rgba(80, 250, 123, 0.07);' : ''}
             ">
               <span style="
                 width: 50px;
                 text-align: right;
                 padding-right: 12px;
                 padding-left: 8px;
-                background-color: #242837;
-                color: #676E95;
-                border-right: 1px solid rgba(255,255,255,0.05);
+                background-color: #21222c;
+                color: #6272a4;
+                border-right: 1px solid #44475a;
                 user-select: none;
                 font-family: 'SF Mono', 'JetBrains Mono', monospace;
                 font-size: 14px;
@@ -1445,7 +1431,7 @@ const generateCodeDisplay = (codeContent, funcName) => {
               <span style="
                 padding-left: 12px;
                 padding-right: 12px;
-                color: #A6ACCD;
+                color: #f8f8f2;
                 white-space: pre;
                 min-width: 600px;
                 font-family: 'Operator Mono', 'SF Mono', 'Source Code Pro', monospace;
