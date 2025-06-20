@@ -341,7 +341,7 @@ const getHighlightedLine = (line) => {
   }
 };
 
-// 在DOM更新后处理函数调用高亮
+  // 在DOM更新后处理函数调用高亮
 const processCodeLineHighlighting = () => {
   nextTick(() => {
     // 确保已经解析了函数定义
@@ -361,14 +361,8 @@ const processCodeLineHighlighting = () => {
       for (const funcName of Object.keys(functionDefinitions.value)) {
         // 检查这一行是否包含函数调用
         if (lineText.includes(funcName + '(')) {
-          // 获取函数定义的HTML内容
+          // 获取函数定义对象
           const funcDef = functionDefinitions.value[funcName];
-          const tooltip = funcDef.definitionText
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;')
-            .substring(0, 1000);
 
           // 使用DOM操作直接处理函数调用
           const textNodes = [];
@@ -386,8 +380,11 @@ const processCodeLineHighlighting = () => {
                 // 创建高亮元素
                 const highlightSpan = document.createElement('span');
                 highlightSpan.className = 'function-call-highlight';
+
+                // 设置函数名属性，用于查找函数定义
                 highlightSpan.setAttribute('data-function', funcName);
-                highlightSpan.setAttribute('data-tippy-content', tooltip);
+
+                // 设置函数文本
                 highlightSpan.textContent = funcName;
 
                 // 添加点击事件
@@ -419,7 +416,6 @@ const processCodeLineHighlighting = () => {
                 const highlightSpan = document.createElement('span');
                 highlightSpan.className = 'function-call-highlight';
                 highlightSpan.setAttribute('data-function', funcName);
-                highlightSpan.setAttribute('data-tippy-content', tooltip);
                 highlightSpan.textContent = funcName;
 
                 // 添加点击事件
@@ -1011,7 +1007,14 @@ const initTooltips = () => {
           });
         }
 
-        // 为每个函数调用元素添加点击事件
+              // 移除所有现有的弹窗
+      document.querySelectorAll('.custom-code-popover').forEach(popover => {
+        if (document.body.contains(popover)) {
+          document.body.removeChild(popover);
+        }
+      });
+
+        // 为每个函数调用元素添加交互事件
         functionCalls.forEach(el => {
           // 添加点击事件
           el.onclick = (event) => {
@@ -1023,28 +1026,141 @@ const initTooltips = () => {
               event.stopPropagation();
             }
           };
+
+          // 添加键盘导航
+          el.setAttribute('tabindex', '0');
+          el.setAttribute('role', 'button');
+          el.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              const funcName = el.getAttribute('data-function');
+              if (funcName) {
+                jumpToFunction(funcName);
+                event.preventDefault();
+              }
+            }
+          });
+
+          // 添加鼠标悬停事件
+          el.addEventListener('mouseenter', function(event) {
+            const funcName = el.getAttribute('data-function');
+            if (!funcName) return;
+
+            // 获取元素位置
+            const rect = el.getBoundingClientRect();
+
+            // 创建方块形弹窗
+            const popover = document.createElement('div');
+            popover.className = 'custom-code-popover';
+
+            // 设置弹窗样式 - 强制方块形状
+            popover.style.cssText = `
+              position: fixed;
+              z-index: 9999;
+              width: 500px;
+              height: 500px;
+              background-color: #282a36;
+              border: 1px solid #414558;
+              border-radius: 6px;
+              box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+              overflow: hidden;
+              display: flex;
+              flex-direction: column;
+              aspect-ratio: 1 / 1;
+            `;
+
+            // 计算位置 - 调整尺寸为500px
+            let topPos = rect.top - 510; // 向上增加空间
+            let leftPos = rect.left;
+
+            // 调整位置避免超出视口
+            if (topPos < 10) topPos = rect.bottom + 10;
+            if (leftPos + 500 > window.innerWidth) leftPos = window.innerWidth - 510;
+            if (leftPos < 10) leftPos = 10;
+
+            // 设置位置
+            popover.style.top = `${topPos}px`;
+            popover.style.left = `${leftPos}px`;
+
+            // 创建加载中内容
+            popover.innerHTML = `
+              <div style="
+                height: 36px;
+                background-color: #1d1e27;
+                color: #50fa7b;
+                font-weight: bold;
+                border-bottom: 1px solid #414558;
+                padding: 8px 12px;
+                font-size: 14px;
+              ">函数定义: ${escapeHtml(funcName)}</div>
+              <div style="
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #f8f8f2;
+              ">加载中...</div>
+            `;
+
+            // 添加到DOM
+            document.body.appendChild(popover);
+
+            // 保存弹窗引用
+            el._popover = popover;
+
+            // 处理鼠标离开
+            const handleMouseLeave = function(evt) {
+              // 检查是否移动到弹窗上
+              if (evt.relatedTarget === popover ||
+                  (popover.contains(evt.relatedTarget))) {
+                return;
+              }
+
+              // 删除弹窗
+              if (document.body.contains(popover)) {
+                document.body.removeChild(popover);
+              }
+
+              // 移除事件监听
+              el.removeEventListener('mouseleave', handleMouseLeave);
+              popover.removeEventListener('mouseleave', handleMouseLeave);
+            };
+
+            // 添加鼠标离开监听
+            el.addEventListener('mouseleave', handleMouseLeave);
+            popover.addEventListener('mouseleave', handleMouseLeave);
+
+            // 异步加载函数定义
+            findFunctionDefinition(funcName).then(definitionCode => {
+              if (document.body.contains(popover)) {
+                popover.innerHTML = generateCodeDisplay(definitionCode, funcName);
+              }
+            }).catch(error => {
+              console.error('加载函数定义失败:', error);
+              if (document.body.contains(popover)) {
+                popover.innerHTML = `
+                  <div style="
+                    height: 36px;
+                    background-color: #1d1e27;
+                    color: #50fa7b;
+                    font-weight: bold;
+                    border-bottom: 1px solid #414558;
+                    padding: 8px 12px;
+                    font-size: 14px;
+                  ">函数定义: ${escapeHtml(funcName)}</div>
+                  <div style="
+                    flex: 1;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: #f8f8f2;
+                  ">未找到函数定义</div>
+                `;
+              }
+            });
+          });
         });
 
-        // 初始化工具提示
-        window._tippyInstances = tippy('.function-call-highlight', {
-          allowHTML: true,
-          theme: 'light',
-          placement: 'top',
-          maxWidth: 800,
-          interactive: true,
-          delay: [200, 0],
-          content(reference) {
-            const content = reference.getAttribute('data-tippy-content');
-            return `<pre class="code-tooltip">${content || '函数定义'}</pre>`;
-          },
-          onShow(instance) {
-            // 添加Element Plus的样式类
-            instance.popper.classList.add('el-tooltip__popper');
-            instance.popper.classList.add('is-light');
-          }
-        });
-
-        console.log('成功初始化工具提示', window._tippyInstances.length);
+        console.log('成功初始化自定义弹窗');
       } else {
         console.log('未找到函数调用元素');
         // 如果没找到元素，再尝试一次
@@ -1056,7 +1172,247 @@ const initTooltips = () => {
   }, 100);
 };
 
-// 函数点击事件已直接内联到元素的onclick属性中
+// 生成代码显示HTML
+const generateCodeDisplay = (codeContent, funcName) => {
+  // 整理代码内容
+  let content = codeContent || '函数定义未找到';
+  if (content.length > 5000) {
+    content = content.substring(0, 5000) + '...(省略部分内容)';
+  }
+
+  // 分行处理
+  const codeLines = content.split('\n');
+
+  // 查找函数签名行
+  let functionSignature = '';
+  if (codeLines.length > 0) {
+    for (let i = 0; i < Math.min(5, codeLines.length); i++) {
+      if (codeLines[i].includes(`function ${funcName}`) ||
+          codeLines[i].includes(`${funcName} =`) ||
+          codeLines[i].includes(`${funcName}(`)) {
+        functionSignature = codeLines[i];
+        break;
+      }
+    }
+
+    // 如果没找到，使用第一行
+    if (!functionSignature) {
+      functionSignature = codeLines[0];
+    }
+  }
+
+  // 限制行数使其方形显示，但增加行数以显示更多内容
+  const displayLines = codeLines.length > 20
+    ? [...codeLines.slice(0, 20), '...(省略部分内容)']
+    : codeLines;
+
+  // 限制每行长度 - 增加到60个字符，显示更多内容
+  const formattedLines = displayLines.map(line => {
+    if (line.length <= 60) return escapeHtml(line);
+    return escapeHtml(line.substring(0, 60) + '...');
+  });
+
+  // 使用Prism进行代码高亮处理
+  try {
+    // 高亮完整代码，然后分行
+    const highlightedCode = Prism.highlight(
+      content,
+      Prism.languages.javascript,
+      'javascript'
+    );
+
+    // 按行分割高亮后的代码
+    const highlightedLines = highlightedCode.split('\n');
+
+    // 提取前20行
+    const displayHighlightedLines = codeLines.length > 20
+      ? [...highlightedLines.slice(0, 20), '<span class="token comment">// ...(省略部分内容)</span>']
+      : highlightedLines;
+
+    // 添加内联样式，确保代码高亮有正确颜色
+    const codeStyles = `
+      <style>
+        .token.comment { color: #6272a4; }
+        .token.keyword { color: #ff79c6; }
+        .token.string { color: #f1fa8c; }
+        .token.function { color: #50fa7b; }
+        .token.number { color: #bd93f9; }
+        .token.operator { color: #ff79c6; }
+        .token.punctuation { color: #f8f8f2; }
+        .token.parameter { color: #ffb86c; }
+        .token.class-name { color: #8be9fd; }
+        .token.boolean { color: #bd93f9; }
+      </style>
+    `;
+
+    // 构建HTML - 使用高亮版本
+    return `
+      ${codeStyles}
+      <div style="
+        height: 36px;
+        background-color: #1d1e27;
+        color: #50fa7b;
+        font-weight: bold;
+        border-bottom: 1px solid #414558;
+        padding: 8px 12px;
+        font-size: 14px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      ">函数定义: ${escapeHtml(funcName || '')}</div>
+
+      <div style="
+        padding: 8px 12px;
+        background-color: #2a2a2a;
+        color: #ff79c6;
+        font-family: monospace;
+        font-weight: bold;
+        border-bottom: 1px solid #414558;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      ">${escapeHtml(functionSignature)}</div>
+
+      <div style="
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+      ">
+        <div style="
+          overflow-x: auto;
+          width: 100%;
+          position: relative;
+        ">
+          ${displayHighlightedLines.map((line, index) => `
+            <div style="
+              display: flex;
+              border-bottom: 1px solid rgba(65, 69, 88, 0.1);
+            ">
+              <span style="
+                width: 40px;
+                flex-shrink: 0;
+                text-align: right;
+                padding-right: 8px;
+                padding-left: 4px;
+                background-color: #252733;
+                color: #6272a4;
+                border-right: 1px solid #414558;
+                user-select: none;
+              ">${index + 1}</span>
+              <span style="
+                padding-left: 8px;
+                padding-right: 8px;
+                color: #f8f8f2;
+                white-space: pre;
+                min-width: 400px;
+              ">${line}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    // 如果高亮处理失败，回退到原始版本
+    console.error('代码高亮处理失败', e);
+
+    // 构建HTML - 原始版本
+    return `
+      <div style="
+        height: 36px;
+        background-color: #1d1e27;
+        color: #50fa7b;
+        font-weight: bold;
+        border-bottom: 1px solid #414558;
+        padding: 8px 12px;
+        font-size: 14px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      ">函数定义: ${escapeHtml(funcName || '')}</div>
+
+      <div style="
+        padding: 8px 12px;
+        background-color: #2a2a2a;
+        color: #ff79c6;
+        font-family: monospace;
+        font-weight: bold;
+        border-bottom: 1px solid #414558;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      ">${escapeHtml(functionSignature)}</div>
+
+      <div style="
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+      ">
+        <div style="
+          overflow-x: auto;
+          width: 100%;
+          position: relative;
+        ">
+          ${formattedLines.map((line, index) => `
+            <div style="
+              display: flex;
+              border-bottom: 1px solid rgba(65, 69, 88, 0.1);
+            ">
+              <span style="
+                width: 40px;
+                text-align: right;
+                padding-right: 8px;
+                padding-left: 4px;
+                background-color: #252733;
+                color: #6272a4;
+                border-right: 1px solid #414558;
+                user-select: none;
+              ">${index + 1}</span>
+              <span style="
+                padding-left: 8px;
+                padding-right: 8px;
+                color: #f8f8f2;
+                white-space: pre;
+                min-width: 400px;
+              ">${line}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+};
+
+// 查找函数定义的实现
+const findFunctionDefinition = async (funcName) => {
+  return new Promise((resolve, reject) => {
+    try {
+      // 从已存储的函数定义中获取
+      if (functionDefinitions.value[funcName]) {
+        const definition = functionDefinitions.value[funcName];
+        resolve(definition.definitionText || `函数 ${funcName} 的定义未找到`);
+      } else {
+        // 如果未找到，返回提示信息
+        resolve(`// 函数 ${funcName} 的定义未在当前文件中找到`);
+      }
+    } catch (error) {
+      console.error('获取函数定义失败:', error);
+      reject(error);
+    }
+  });
+};
+
+// HTML转义辅助函数
+const escapeHtml = (unsafe) => {
+  if (!unsafe) return '';
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+};
 
 watch(() => props.filePath, (newPath) => {
   if (newPath) {
@@ -1275,20 +1631,26 @@ onMounted(() => {
 :deep(.function-call-highlight) {
   color: #409eff !important;
   cursor: pointer;
-  font-weight: bold;
-  background-color: rgba(64, 158, 255, 0.1);
-  padding: 0 4px;
+  font-weight: normal;
+  padding: 0 2px;
   border-radius: 2px;
   transition: all 0.2s ease;
   border-bottom: 1px dashed #409eff;
   position: relative;
   text-decoration: none;
+  outline: none;
 }
 
-:deep(.function-call-highlight:hover) {
+:deep(.function-call-highlight:hover),
+:deep(.function-call-highlight:focus) {
   color: #409eff !important;
-  background-color: rgba(64, 158, 255, 0.2);
+  background-color: rgba(64, 158, 255, 0.1);
   border-bottom: 1px solid #409eff;
+  box-shadow: 0 2px 4px rgba(64, 158, 255, 0.1);
+}
+
+:deep(.function-call-highlight:focus-visible) {
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.4);
 }
 
 /* 目标行高亮样式 */
@@ -1551,42 +1913,223 @@ onMounted(() => {
 
 /* 代码提示工具样式 - Element Plus风格 */
 :deep(.tippy-box[data-theme~='light']) {
-  background-color: #fff;
-  border: 1px solid #e4e7ed;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
-  color: #606266;
+  background-color: #282a36;
+  border: 1px solid #414558;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  color: #f8f8f2;
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 1.5;
   padding: 0;
-  max-width: 600px !important;
+  /* 尺寸在JS中设置，这里不再限制 */
 }
 
 :deep(.tippy-box[data-theme~='light'] .tippy-content) {
   padding: 0;
+  height: 100%;
 }
 
-:deep(.code-tooltip) {
-  margin: 0;
-  padding: 12px 16px;
-  font-size: 0.85rem;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  max-height: 400px;
-  overflow: auto;
-  background-color: #fafafa;
-  border-radius: 4px;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  color: #303133;
+/* 重置可能干扰JS尺寸设置的样式 */
+:deep(.tippy-box) {
+  transform: none !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+/* 正方形工具提示样式 */
+:deep(.square-tooltip) {
+  aspect-ratio: 1 / 1 !important;
+  display: block !important;
+  transform: none !important;
+}
+
+:deep(.square-tooltip .tippy-content) {
+  aspect-ratio: 1 / 1 !important;
+  height: 100% !important;
+}
+
+:deep(.square-tooltip .tippy-arrow) {
+  transform: none !important;
+}
+
+/* 代码语法高亮 - 暗色主题 */
+:deep(.code-tooltip .token.comment) { color: #6272a4; }
+:deep(.code-tooltip .token.keyword) { color: #ff79c6; }
+:deep(.code-tooltip .token.string) { color: #f1fa8c; }
+:deep(.code-tooltip .token.function) { color: #50fa7b; }
+:deep(.code-tooltip .token.number) { color: #bd93f9; }
+:deep(.code-tooltip .token.operator) { color: #ff79c6; }
+:deep(.code-tooltip .token.punctuation) { color: #f8f8f2; }
+:deep(.code-tooltip .token.parameter) { color: #ffb86c; }
+:deep(.code-tooltip .token.class-name) { color: #8be9fd; }
+:deep(.code-tooltip .token.boolean) { color: #bd93f9; }
+
+/* 箭头样式 */
+:deep(.tippy-arrow) {
+  color: #282a36;
+}
+
+:deep(.tippy-box[data-theme~='light'] .tippy-arrow::before) {
+  border-color: #414558;
 }
 
 :deep(.tippy-box[data-theme~='light'][data-placement^='top'] > .tippy-arrow::before) {
-  border-top-color: #e4e7ed;
+  border-top-color: #414558;
 }
 
-/* 添加Element Plus的样式类 */
-:deep(.el-tooltip__popper.is-light) {
-  background-color: #fff;
-  border: 1px solid #e4e7ed;
+/* 添加编辑器风格 */
+:deep(.el-popover.el-popper.is-light) {
+  --el-popover-padding: 0;
+  --el-popover-border-radius: 4px;
+  --el-popover-border-color: #414558;
+  --el-popover-bg-color: #282a36;
+  border-color: var(--el-popover-border-color);
+  background-color: var(--el-popover-bg-color);
+  border-radius: var(--el-popover-border-radius);
+}
+
+/* 添加更好的代码块样式 */
+:deep(.code-tooltip-wrapper) {
+  position: relative;
+  padding: 0;
+  border-radius: 6px;
+  background-color: #282a36;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  /* 添加一些视觉效果增强方形感知 */
+  border: 1px solid #414558;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.3);
+}
+
+/* 方块式布局样式 */
+:deep(.code-tooltip-wrapper.block-display) {
+  width: 400px !important;
+  height: 400px !important;
+  max-width: 400px !important;
+  max-height: 400px !important;
+  aspect-ratio: 1 / 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+:deep(.code-tooltip) {
+  position: relative;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Courier New', monospace;
+  color: #f8f8f2;
+  white-space: pre-wrap; /* 允许在单词之间自动换行 */
+  word-wrap: break-word; /* 允许长单词换行 */
+  word-break: break-all; /* 强制在任何字符处换行 */
+  tab-size: 2;
+  -moz-tab-size: 2;
+  flex: 1;
+  overflow: auto;
+  margin-top: 36px;
+  padding: 8px 16px;
+  width: calc(100% - 32px);
+  height: calc(100% - 60px);
+  box-sizing: border-box;
+}
+
+/* 添加代码块标题 */
+:deep(.code-tooltip-wrapper)::before {
+  content: attr(data-filename, 'Function Definition');
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 8px 16px;
+  height: 36px;
+  background-color: #1d1e27;
+  color: #50fa7b;
+  font-size: 0.85rem;
+  font-weight: bold;
+  border-bottom: 1px solid #414558;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  box-sizing: border-box;
+  z-index: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 方块式代码展示 */
+:deep(.function-signature) {
+  padding: 8px 10px;
+  background-color: #1d1e27;
+  color: #ff79c6;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Courier New', monospace;
+  font-size: 14px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid #414558;
+  margin-top: 36px;
+}
+
+:deep(.code-blocks) {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  max-height: 320px;
+  padding: 0;
+  margin: 0;
+  background-color: #282a36;
+}
+
+:deep(.code-blocks.square-layout) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+  margin: 0;
+  background-color: #282a36;
+  height: calc(100% - 70px);
+  max-height: none;
+}
+
+:deep(.code-block-line) {
+  display: flex;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Courier New', monospace;
+  font-size: 13px;
+  padding: 0;
+  margin: 0;
+  line-height: 1.5;
+  border-bottom: 1px solid rgba(65, 69, 88, 0.2);
+}
+
+:deep(.line-number) {
+  display: inline-block;
+  width: 30px;
+  text-align: right;
+  padding: 0 8px 0 4px;
+  color: #6272a4;
+  border-right: 1px solid #414558;
+  background-color: #252733;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+:deep(.line-content) {
+  padding-left: 8px;
+  padding-right: 8px;
+  color: #f8f8f2;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-grow: 1;
 }
 </style>
