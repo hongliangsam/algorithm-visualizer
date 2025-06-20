@@ -26,6 +26,7 @@ env:
   AZURE_WEBAPP_NAME: your-app-name    # set this to your application's name
   AZURE_WEBAPP_PACKAGE_PATH: '.'      # set this to the path to your web app project, defaults to the repository root
   NODE_VERSION: '20.x'                # set this to the node version to use
+  PNPM_VERSION: '8.x'                 # set this to the pnpm version to use
 
 permissions:
   contents: read
@@ -40,13 +41,31 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
 
-    - name: npm install, build, and test
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: ${{ env.PNPM_VERSION }}
+        run_install: false
+
+    - name: Get pnpm store directory
+      shell: bash
       run: |
-        npm install
-        npm run build --if-present
-        npm run test --if-present
+        echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+    - name: Setup pnpm cache
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-
+
+    - name: pnpm install, build, and test
+      run: |
+        pnpm install
+        pnpm run build --if-present
+        pnpm run test --if-present
 
     - name: Upload artifact for deployment job
       uses: actions/upload-artifact@v4
