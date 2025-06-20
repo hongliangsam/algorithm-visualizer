@@ -6,7 +6,7 @@
 
 const { ListNode } = require('../modules/ListNode');
 const { TreeNode } = require('../modules/TreeNode');
-const { printTree } = require('../modules/PrintUtil');
+// const { printTree } = require('../modules/PrintUtil');
 
 /* 函数 */
 function constFunc() {
@@ -88,6 +88,16 @@ function buildTree(n) {
     return root;
 }
 
+// 简单的树打印函数
+function simplePrintTree(node) {
+  if (!node) return null;
+  return {
+    val: node.val,
+    left: simplePrintTree(node.left),
+    right: simplePrintTree(node.right)
+  };
+}
+
 /* Driver Code */
 const n = 5;
 // 常数阶
@@ -100,4 +110,6 @@ quadratic(n);
 quadraticRecur(n);
 // 指数阶
 const root = buildTree(n);
-printTree(root);
+// 使用简单的方式打印树
+console.log("Binary Tree Structure:");
+console.log(JSON.stringify(simplePrintTree(root), null, 2));

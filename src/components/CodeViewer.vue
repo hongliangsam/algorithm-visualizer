@@ -605,114 +605,163 @@ const runCodeBlock = async (lineNumber) => {
         moduleData[moduleName] = moduleFiles[path];
       });
 
-      // 创建沙箱代码，保留前面的变量定义和操作，但不执行console
-      const sandboxCode = `
-        (function() {
-          "use strict";
+      // 创建沙箱代码
+      let sandboxCode = '(function() {';
+      sandboxCode += '"use strict";';
 
-          // 创建模块缓存
-          const moduleCache = ${JSON.stringify(moduleData)};
+      // 创建模块缓存
+      sandboxCode += 'const moduleCache = ' + JSON.stringify(moduleData) + ';';
 
-          // 创建模拟的 require 函数
-          const require = function(modulePath) {
-            // 从路径中提取模块名
-            const moduleName = modulePath.includes('/')
-              ? modulePath.split('/').pop()
-              : modulePath;
+      // 模拟Node.js环境
+      sandboxCode +=
+        '// 模拟Node.js环境\n' +
+        'const process = {\n' +
+        '  env: {},\n' +
+        '  nextTick: function(callback) { setTimeout(callback, 0); },\n' +
+        '  cwd: function() { return "/"; },\n' +
+        '  argv: [],\n' +
+        '  version: "v14.17.0",\n' +
+        '  versions: { node: "14.17.0" },\n' +
+        '  platform: "browser",\n' +
+        '  exit: function() {},\n' +
+        '  stdout: {\n' +
+        '    write: function(text) {\n' +
+        '      console.log(text);\n' +
+        '      return true;\n' +
+        '    }\n' +
+        '  },\n' +
+        '  stderr: {\n' +
+        '    write: function(text) {\n' +
+        '      console.error(text);\n' +
+        '      return true;\n' +
+        '    }\n' +
+        '  }\n' +
+        '};\n' +
+        '\n' +
+        '// 模拟全局对象\n' +
+        'const global = window;\n' +
+        'const __dirname = "/";\n' +
+        'const __filename = "current_file.js";\n';
 
-            // 如果模块缓存中有该模块
-            if (moduleCache[moduleName]) {
-              // 从模块内容创建模块
-              const moduleContent = moduleCache[moduleName];
-              const moduleExports = {};
-              const module = { exports: moduleExports };
+      // 创建模拟的 require 函数
+      sandboxCode +=
+        '// 创建模拟的 require 函数\n' +
+        'const require = function(modulePath) {\n' +
+        '  // 从路径中提取模块名\n' +
+        '  const moduleName = modulePath.includes("/")\n' +
+        '    ? modulePath.split("/").pop()\n' +
+        '    : modulePath;\n' +
+        '\n' +
+        '  // 如果模块缓存中有该模块\n' +
+        '  if (moduleCache[moduleName]) {\n' +
+        '    // 从模块内容创建模块\n' +
+        '    const moduleContent = moduleCache[moduleName];\n' +
+        '    const moduleExports = {};\n' +
+        '    const module = { exports: moduleExports };\n' +
+        '\n' +
+        '    // 执行模块代码\n' +
+        '    try {\n' +
+        '      const moduleFn = new Function("module", "exports", "require", "process", "global", "__dirname", "__filename", moduleContent);\n' +
+        '      moduleFn(module, module.exports, require, process, global, __dirname, __filename);\n' +
+        '      return module.exports;\n' +
+        '    } catch (error) {\n' +
+        '      console.error("加载模块 " + moduleName + " 失败: " + error.message);\n' +
+        '      return {};\n' +
+        '    }\n' +
+        '  }\n' +
+        '\n' +
+        '  // 模拟一些常用模块\n' +
+        '  switch (modulePath) {\n' +
+        '    case "./ListNode":\n' +
+        '    case "../modules/ListNode":\n' +
+        '      return {\n' +
+        '        ListNode: class ListNode {\n' +
+        '          constructor(val, next = null) {\n' +
+        '            this.val = val;\n' +
+        '            this.next = next;\n' +
+        '          }\n' +
+        '        }\n' +
+        '      };\n' +
+        '    case "./TreeNode":\n' +
+        '    case "../modules/TreeNode":\n' +
+        '      return {\n' +
+        '        TreeNode: class TreeNode {\n' +
+        '          constructor(val, left = null, right = null) {\n' +
+        '            this.val = val;\n' +
+        '            this.left = left;\n' +
+        '            this.right = right;\n' +
+        '          }\n' +
+        '        }\n' +
+        '      };\n' +
+        '    case "./PrintUtil":\n' +
+        '    case "../modules/PrintUtil":\n' +
+        '      return {\n' +
+        '        printLinkedList: (head) => {\n' +
+        '          let result = "";\n' +
+        '          let current = head;\n' +
+        '          while (current) {\n' +
+        '            result += current.val + " -> ";\n' +
+        '            current = current.next;\n' +
+        '          }\n' +
+        '          console.log(result + "null");\n' +
+        '          return result + "null";\n' +
+        '        },\n' +
+        '        printTree: (root) => {\n' +
+        '          // 更简单、更紧凑的树形打印函数\n' +
+        '          const printBinaryTreeSimple = (node) => {\n' +
+        '            if (!node) return "null";\n' +
+        '            \n' +
+        '            // 将树转换为普通JavaScript对象\n' +
+        '            function treeToObject(n) {\n' +
+        '              if (!n) return null;\n' +
+        '              return {\n' +
+        '                value: n.val,\n' +
+        '                left: treeToObject(n.left),\n' +
+        '                right: treeToObject(n.right)\n' +
+        '              };\n' +
+        '            }\n' +
+        '            \n' +
+        '            return JSON.stringify(treeToObject(node));\n' +
+        '          };\n' +
+        '          \n' +
+        '          const treeStr = printBinaryTreeSimple(root);\n' +
+        '          console.log("Binary Tree:");\n' +
+        '          console.log(treeStr);\n' +
+        '          return treeStr;\n' +
+        '        },\n' +
+        '        printHeap: (arr) => {\n' +
+        '          console.log("堆的数组表示：");\n' +
+        '          console.log(arr);\n' +
+        '          console.log("堆的树状表示：");\n' +
+        '          const heapTreeStr = arr.reduce((acc, val, idx) => {\n' +
+        '            return acc + idx + ": " + val + "\\n";\n' +
+        '          }, "");\n' +
+        '          console.log(heapTreeStr);\n' +
+        '          return heapTreeStr;\n' +
+        '        }\n' +
+        '      };\n' +
+        '    case "./Vertex":\n' +
+        '    case "../modules/Vertex":\n' +
+        '      return {\n' +
+        '        Vertex: class Vertex {\n' +
+        '          constructor(val) {\n' +
+        '            this.val = val;\n' +
+        '            this.neighbors = [];\n' +
+        '          }\n' +
+        '\n' +
+        '          addNeighbor(vertex) {\n' +
+        '            this.neighbors.push(vertex);\n' +
+        '          }\n' +
+        '        }\n' +
+        '      };\n' +
+        '    default:\n' +
+        '      console.warn("模块 \'" + modulePath + "\' 未找到，返回空对象");\n' +
+        '      return {};\n' +
+        '  }\n' +
+        '};\n';
 
-              // 执行模块代码
-              try {
-                const moduleFn = new Function('module', 'exports', 'require', moduleContent);
-                moduleFn(module, module.exports, require);
-                return module.exports;
-              } catch (error) {
-                console.error(\`加载模块 \${moduleName} 失败: \${error.message}\`);
-                return {};
-              }
-            }
-
-            // 模拟一些常用模块
-            switch (modulePath) {
-              case './ListNode':
-              case '../modules/ListNode':
-                return {
-                  ListNode: class ListNode {
-                    constructor(val, next = null) {
-                      this.val = val;
-                      this.next = next;
-                    }
-                  }
-                };
-              case './TreeNode':
-              case '../modules/TreeNode':
-                return {
-                  TreeNode: class TreeNode {
-                    constructor(val, left = null, right = null) {
-                      this.val = val;
-                      this.left = left;
-                      this.right = right;
-                    }
-                  }
-                };
-              case './PrintUtil':
-              case '../modules/PrintUtil':
-                return {
-                  printLinkedList: (head) => {
-                    let result = '';
-                    let current = head;
-                    while (current) {
-                      result += current.val + ' -> ';
-                      current = current.next;
-                    }
-                    console.log(result + 'null');
-                    return result + 'null';
-                  },
-                  printTree: (root) => {
-                    const result = JSON.stringify(root, null, 2);
-                    console.log(result);
-                    return result;
-                  },
-                  printHeap: (arr) => {
-                    console.log('堆的数组表示：');
-                    console.log(arr);
-                    console.log('堆的树状表示：');
-                    console.log(JSON.stringify(arr, null, 2));
-                  }
-                };
-              case './Vertex':
-              case '../modules/Vertex':
-                return {
-                  Vertex: class Vertex {
-                    constructor(val) {
-                      this.val = val;
-                      this.neighbors = [];
-                    }
-
-                    addNeighbor(vertex) {
-                      this.neighbors.push(vertex);
-                    }
-                  }
-                };
-              default:
-                console.warn(\`模块 "\${modulePath}" 未找到，返回空对象\`);
-                return {};
-            }
-          };
-
-          // 执行上下文代码，包含函数定义和前面的变量操作，但不执行console
-          ${contextCode}
-
-          // 执行当前代码块
-          ${blockCode}
-        })();
-      `;
+      // 添加代码执行部分
+      sandboxCode += '// 执行代码\n' + code.value + '\n})();';
 
       // 使用 Function 构造器运行代码
       new Function(sandboxCode)();
@@ -810,107 +859,162 @@ const runCode = async () => {
       });
 
       // 创建沙箱代码
-      const sandboxCode = `
-        (function() {
-          "use strict";
+      let sandboxCode = '(function() {';
+      sandboxCode += '"use strict";';
 
-          // 创建模块缓存
-          const moduleCache = ${JSON.stringify(moduleData)};
+      // 创建模块缓存
+      sandboxCode += 'const moduleCache = ' + JSON.stringify(moduleData) + ';';
 
-          // 创建模拟的 require 函数
-          const require = function(modulePath) {
-            // 从路径中提取模块名
-            const moduleName = modulePath.includes('/')
-              ? modulePath.split('/').pop()
-              : modulePath;
+      // 模拟Node.js环境
+      sandboxCode +=
+        '// 模拟Node.js环境\n' +
+        'const process = {\n' +
+        '  env: {},\n' +
+        '  nextTick: function(callback) { setTimeout(callback, 0); },\n' +
+        '  cwd: function() { return "/"; },\n' +
+        '  argv: [],\n' +
+        '  version: "v14.17.0",\n' +
+        '  versions: { node: "14.17.0" },\n' +
+        '  platform: "browser",\n' +
+        '  exit: function() {},\n' +
+        '  stdout: {\n' +
+        '    write: function(text) {\n' +
+        '      console.log(text);\n' +
+        '      return true;\n' +
+        '    }\n' +
+        '  },\n' +
+        '  stderr: {\n' +
+        '    write: function(text) {\n' +
+        '      console.error(text);\n' +
+        '      return true;\n' +
+        '    }\n' +
+        '  }\n' +
+        '};\n' +
+        '\n' +
+        '// 模拟全局对象\n' +
+        'const global = window;\n' +
+        'const __dirname = "/";\n' +
+        'const __filename = "current_file.js";\n';
 
-            // 如果模块缓存中有该模块
-            if (moduleCache[moduleName]) {
-              // 从模块内容创建模块
-              const moduleContent = moduleCache[moduleName];
-              const moduleExports = {};
-              const module = { exports: moduleExports };
+      // 创建模拟的 require 函数
+      sandboxCode +=
+        '// 创建模拟的 require 函数\n' +
+        'const require = function(modulePath) {\n' +
+        '  // 从路径中提取模块名\n' +
+        '  const moduleName = modulePath.includes("/")\n' +
+        '    ? modulePath.split("/").pop()\n' +
+        '    : modulePath;\n' +
+        '\n' +
+        '  // 如果模块缓存中有该模块\n' +
+        '  if (moduleCache[moduleName]) {\n' +
+        '    // 从模块内容创建模块\n' +
+        '    const moduleContent = moduleCache[moduleName];\n' +
+        '    const moduleExports = {};\n' +
+        '    const module = { exports: moduleExports };\n' +
+        '\n' +
+        '    // 执行模块代码\n' +
+        '    try {\n' +
+        '      const moduleFn = new Function("module", "exports", "require", "process", "global", "__dirname", "__filename", moduleContent);\n' +
+        '      moduleFn(module, module.exports, require, process, global, __dirname, __filename);\n' +
+        '      return module.exports;\n' +
+        '    } catch (error) {\n' +
+        '      console.error("加载模块 " + moduleName + " 失败: " + error.message);\n' +
+        '      return {};\n' +
+        '    }\n' +
+        '  }\n' +
+        '\n' +
+        '  // 模拟一些常用模块\n' +
+        '  switch (modulePath) {\n' +
+        '    case "./ListNode":\n' +
+        '    case "../modules/ListNode":\n' +
+        '      return {\n' +
+        '        ListNode: class ListNode {\n' +
+        '          constructor(val, next = null) {\n' +
+        '            this.val = val;\n' +
+        '            this.next = next;\n' +
+        '          }\n' +
+        '        }\n' +
+        '      };\n' +
+        '    case "./TreeNode":\n' +
+        '    case "../modules/TreeNode":\n' +
+        '      return {\n' +
+        '        TreeNode: class TreeNode {\n' +
+        '          constructor(val, left = null, right = null) {\n' +
+        '            this.val = val;\n' +
+        '            this.left = left;\n' +
+        '            this.right = right;\n' +
+        '          }\n' +
+        '        }\n' +
+        '      };\n' +
+        '    case "./PrintUtil":\n' +
+        '    case "../modules/PrintUtil":\n' +
+        '      return {\n' +
+        '        printLinkedList: (head) => {\n' +
+        '          let result = "";\n' +
+        '          let current = head;\n' +
+        '          while (current) {\n' +
+        '            result += current.val + " -> ";\n' +
+        '            current = current.next;\n' +
+        '          }\n' +
+        '          console.log(result + "null");\n' +
+        '          return result + "null";\n' +
+        '        },\n' +
+        '        printTree: (root) => {\n' +
+        '          // 更简单、更紧凑的树形打印函数\n' +
+        '          const printBinaryTreeSimple = (node) => {\n' +
+        '            if (!node) return "null";\n' +
+        '            \n' +
+        '            // 将树转换为普通JavaScript对象\n' +
+        '            function treeToObject(n) {\n' +
+        '              if (!n) return null;\n' +
+        '              return {\n' +
+        '                value: n.val,\n' +
+        '                left: treeToObject(n.left),\n' +
+        '                right: treeToObject(n.right)\n' +
+        '              };\n' +
+        '            }\n' +
+        '            \n' +
+        '            return JSON.stringify(treeToObject(node));\n' +
+        '          };\n' +
+        '          \n' +
+        '          const treeStr = printBinaryTreeSimple(root);\n' +
+        '          console.log("Binary Tree:");\n' +
+        '          console.log(treeStr);\n' +
+        '          return treeStr;\n' +
+        '        },\n' +
+        '        printHeap: (arr) => {\n' +
+        '          console.log("堆的数组表示：");\n' +
+        '          console.log(arr);\n' +
+        '          console.log("堆的树状表示：");\n' +
+        '          const heapTreeStr = arr.reduce((acc, val, idx) => {\n' +
+        '            return acc + idx + ": " + val + "\\n";\n' +
+        '          }, "");\n' +
+        '          console.log(heapTreeStr);\n' +
+        '          return heapTreeStr;\n' +
+        '        }\n' +
+        '      };\n' +
+        '    case "./Vertex":\n' +
+        '    case "../modules/Vertex":\n' +
+        '      return {\n' +
+        '        Vertex: class Vertex {\n' +
+        '          constructor(val) {\n' +
+        '            this.val = val;\n' +
+        '            this.neighbors = [];\n' +
+        '          }\n' +
+        '\n' +
+        '          addNeighbor(vertex) {\n' +
+        '            this.neighbors.push(vertex);\n' +
+        '          }\n' +
+        '        }\n' +
+        '      };\n' +
+        '    default:\n' +
+        '      console.warn("模块 \'" + modulePath + "\' 未找到，返回空对象");\n' +
+        '      return {};\n' +
+        '  }\n' +
+        '};\n';
 
-              // 执行模块代码
-              try {
-                const moduleFn = new Function('module', 'exports', 'require', moduleContent);
-                moduleFn(module, module.exports, require);
-                return module.exports;
-              } catch (error) {
-                console.error(\`加载模块 \${moduleName} 失败: \${error.message}\`);
-                return {};
-              }
-            }
-
-            // 模拟一些常用模块
-            switch (modulePath) {
-              case './ListNode':
-              case '../modules/ListNode':
-                return {
-                  ListNode: class ListNode {
-                    constructor(val, next = null) {
-                      this.val = val;
-                      this.next = next;
-                    }
-                  }
-                };
-              case './TreeNode':
-              case '../modules/TreeNode':
-                return {
-                  TreeNode: class TreeNode {
-                    constructor(val, left = null, right = null) {
-                      this.val = val;
-                      this.left = left;
-                      this.right = right;
-                    }
-                  }
-                };
-              case './PrintUtil':
-              case '../modules/PrintUtil':
-                return {
-                  printLinkedList: (head) => {
-                    let result = '';
-                    let current = head;
-                    while (current) {
-                      result += current.val + ' -> ';
-                      current = current.next;
-                    }
-                    return result + 'null';
-                  },
-                  printTree: (root) => {
-                    return JSON.stringify(root, null, 2);
-                  },
-                  printHeap: (arr) => {
-                    console.log('堆的数组表示：');
-                    console.log(arr);
-                    console.log('堆的树状表示：');
-                    console.log(JSON.stringify(arr, null, 2));
-                  }
-                };
-              case './Vertex':
-              case '../modules/Vertex':
-                return {
-                  Vertex: class Vertex {
-                    constructor(val) {
-                      this.val = val;
-                      this.neighbors = [];
-                    }
-
-                    addNeighbor(vertex) {
-                      this.neighbors.push(vertex);
-                    }
-                  }
-                };
-              default:
-                console.warn(\`模块 "\${modulePath}" 未找到，返回空对象\`);
-                return {};
-            }
-          };
-
-          // 执行代码
-          ${code.value}
-        })();
-      `;
+      // 添加代码执行部分
+      sandboxCode += '// 执行代码\n' + code.value + '\n})();';
 
       // 使用 Function 构造器运行代码
       new Function(sandboxCode)();
