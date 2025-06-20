@@ -1,18 +1,22 @@
 /**
  * File: linkedlist_stack.js
- * Created Time: 2022-12-22
+ * Created Time: 2022-12-12
  * Author: S-N-O-R-L-A-X (snorlax.xu@outlook.com)
  */
 
-const { ListNode } = require('../modules/ListNode');
+// ListNode class definition (inline instead of import)
+class ListNode {
+    constructor(val, next) {
+        this.val = val === undefined ? 0 : val;
+        this.next = next === undefined ? null : next;
+    }
+}
 
 /* 基于链表实现的栈 */
 class LinkedListStack {
-    #stackPeek; // 将头节点作为栈顶
-    #stkSize = 0; // 栈的长度
-
     constructor() {
         this.#stackPeek = null;
+        this.#stkSize = 0;
     }
 
     /* 获取栈的长度 */
@@ -22,7 +26,7 @@ class LinkedListStack {
 
     /* 判断栈是否为空 */
     isEmpty() {
-        return this.size == 0;
+        return this.size === 0;
     }
 
     /* 入栈 */
@@ -36,6 +40,7 @@ class LinkedListStack {
     /* 出栈 */
     pop() {
         const num = this.peek();
+        if (!this.#stackPeek) throw new Error('栈为空');
         this.#stackPeek = this.#stackPeek.next;
         this.#stkSize--;
         return num;
@@ -57,6 +62,9 @@ class LinkedListStack {
         }
         return res;
     }
+
+    #stackPeek;
+    #stkSize;
 }
 
 /* Driver Code */

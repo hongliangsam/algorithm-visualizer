@@ -4,8 +4,74 @@
  * Author: what-is-me (whatisme@outlook.jp)
  */
 
-const { TreeNode } = require('../modules/TreeNode');
-const { printTree } = require('../modules/PrintUtil');
+// TreeNode class definition (inline instead of import)
+class TreeNode {
+    constructor(val, left, right, height) {
+        this.val = val === undefined ? 0 : val;
+        this.left = left === undefined ? null : left;
+        this.right = right === undefined ? null : right;
+        this.height = height === undefined ? 0 : height;
+    }
+}
+
+// Helper function for printTree
+function Trunk(prev, str) {
+    this.prev = prev;
+    this.str = str;
+}
+
+// Helper function to print branches of the binary tree
+function showTrunks(p) {
+    if (!p) {
+        return '';
+    }
+
+    let result = '';
+    let trunk = p;
+    while (trunk !== null) {
+        result = trunk.str + result;
+        trunk = trunk.prev;
+    }
+
+    return result;
+}
+
+// Helper function for printTree
+function printTreeHelper(root, prev, isLeft) {
+    if (root === null) {
+        return;
+    }
+
+    let prev_str = '    ';
+    let trunk = new Trunk(prev, prev_str);
+
+    printTreeHelper(root.right, trunk, true);
+
+    if (!prev) {
+        trunk.str = '———';
+    } else if (isLeft) {
+        trunk.str = '/———';
+        prev_str = '   |';
+    } else {
+        trunk.str = '\\———';
+        prev.str = prev_str;
+    }
+
+    const trunkStr = showTrunks(trunk);
+    console.log(trunkStr + ' ' + root.val);
+
+    if (prev) {
+        prev.str = prev_str;
+    }
+    trunk.str = '   |';
+
+    printTreeHelper(root.left, trunk, false);
+}
+
+// Print tree function (inline instead of import)
+function printTree(root) {
+    printTreeHelper(root, null, false);
+}
 
 /* AVL 树*/
 class AVLTree {
@@ -206,3 +272,5 @@ testRemove(avlTree, 4); // 删除度为 2 的节点
 /* 查询节点 */
 const node = avlTree.search(7);
 console.log('\n查找到的节点对象为', node, '，节点值 = ' + node.val);
+
+export { AVLTree };
