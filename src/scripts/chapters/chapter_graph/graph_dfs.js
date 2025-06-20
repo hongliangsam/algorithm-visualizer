@@ -4,8 +4,8 @@
  * Author: Zhuo Qinyue (1403450829@qq.com)
  */
 
-const { Vertex } = require('../modules/Vertex');
-const { GraphAdjList } = require('./graph_adjacency_list');
+import { Vertex } from '../modules/Vertex.js';
+import { GraphAdjList } from './graph_adjacency_list.js';
 
 /* 深度优先遍历 DFS */
 // 使用邻接表来表示图，以便获取指定顶点的所有邻接顶点
@@ -33,22 +33,30 @@ function graphDFS(graph, startVet) {
     return res;
 }
 
-/* Driver Code */
-/* 初始化无向图 */
-const v = Vertex.valsToVets([0, 1, 2, 3, 4, 5, 6]);
-const edges = [
-    [v[0], v[1]],
-    [v[0], v[3]],
-    [v[1], v[2]],
-    [v[2], v[5]],
-    [v[4], v[5]],
-    [v[5], v[6]],
-];
-const graph = new GraphAdjList(edges);
-console.log('\n初始化后，图为');
-graph.print();
+// 示例代码（可在控制台中执行）
+function runExample() {
+    /* 初始化无向图 */
+    const v = Vertex.valsToVets([0, 1, 2, 3, 4, 5, 6]);
+    const edges = [
+        [v[0], v[1]],
+        [v[0], v[3]],
+        [v[1], v[2]],
+        [v[2], v[5]],
+        [v[4], v[5]],
+        [v[5], v[6]],
+    ];
+    const graph = new GraphAdjList(edges);
+    console.log('\n初始化后，图为');
+    graph.print();
 
-/* 深度优先遍历 DFS */
-const res = graphDFS(graph, v[0]);
-console.log('\n深度优先遍历（DFS）顶点序列为');
-console.log(Vertex.vetsToVals(res));
+    /* 深度优先遍历 DFS */
+    const res = graphDFS(graph, v[0]);
+    console.log('\n深度优先遍历（DFS）顶点序列为');
+    console.log(Vertex.vetsToVals(res));
+}
+
+export {
+    graphDFS,
+    dfs,
+    runExample
+};

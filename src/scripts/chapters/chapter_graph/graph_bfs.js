@@ -4,8 +4,8 @@
  * Author: Zhuo Qinyue (1403450829@qq.com)
  */
 
-const { GraphAdjList } = require('./graph_adjacency_list');
-const { Vertex } = require('../modules/Vertex');
+import { GraphAdjList } from './graph_adjacency_list.js';
+import { Vertex } from '../modules/Vertex.js';
 
 /* 广度优先遍历 BFS */
 // 使用邻接表来表示图，以便获取指定顶点的所有邻接顶点
@@ -34,28 +34,35 @@ function graphBFS(graph, startVet) {
     return res;
 }
 
-/* Driver Code */
-/* 初始化无向图 */
-const v = Vertex.valsToVets([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-const edges = [
-    [v[0], v[1]],
-    [v[0], v[3]],
-    [v[1], v[2]],
-    [v[1], v[4]],
-    [v[2], v[5]],
-    [v[3], v[4]],
-    [v[3], v[6]],
-    [v[4], v[5]],
-    [v[4], v[7]],
-    [v[5], v[8]],
-    [v[6], v[7]],
-    [v[7], v[8]],
-];
-const graph = new GraphAdjList(edges);
-console.log('\n初始化后，图为');
-graph.print();
+// 示例代码（可在控制台中执行）
+function runExample() {
+    /* 初始化无向图 */
+    const v = Vertex.valsToVets([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    const edges = [
+        [v[0], v[1]],
+        [v[0], v[3]],
+        [v[1], v[2]],
+        [v[1], v[4]],
+        [v[2], v[5]],
+        [v[3], v[4]],
+        [v[3], v[6]],
+        [v[4], v[5]],
+        [v[4], v[7]],
+        [v[5], v[8]],
+        [v[6], v[7]],
+        [v[7], v[8]],
+    ];
+    const graph = new GraphAdjList(edges);
+    console.log('\n初始化后，图为');
+    graph.print();
 
-/* 广度优先遍历 BFS */
-const res = graphBFS(graph, v[0]);
-console.log('\n广度优先遍历（BFS）顶点序列为');
-console.log(Vertex.vetsToVals(res));
+    /* 广度优先遍历 BFS */
+    const res = graphBFS(graph, v[0]);
+    console.log('\n广度优先遍历（BFS）顶点序列为');
+    console.log(Vertex.vetsToVals(res));
+}
+
+export {
+    graphBFS,
+    runExample
+};

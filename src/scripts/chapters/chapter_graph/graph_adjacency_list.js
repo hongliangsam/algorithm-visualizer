@@ -4,7 +4,7 @@
  * Author: Justin (xiefahit@gmail.com)
  */
 
-const { Vertex } = require('../modules/Vertex');
+import { Vertex } from '../modules/Vertex.js';
 
 /* 基于邻接表实现的无向图类 */
 class GraphAdjList {
@@ -91,8 +91,8 @@ class GraphAdjList {
     }
 }
 
-if (require.main === module) {
-    /* Driver Code */
+// 示例代码（可在控制台中执行）
+function runExample() {
     /* 初始化无向图 */
     const v0 = new Vertex(1),
         v1 = new Vertex(3),
@@ -136,6 +136,7 @@ if (require.main === module) {
     graph.print();
 }
 
-module.exports = {
+export {
     GraphAdjList,
+    runExample
 };

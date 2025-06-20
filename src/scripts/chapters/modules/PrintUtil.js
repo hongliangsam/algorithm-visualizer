@@ -4,7 +4,7 @@
  * Author: IsChristina (christinaxia77@foxmail.com)
  */
 
-const { arrToTree } = require('./TreeNode');
+import { arrToTree } from './TreeNode.js';
 
 /**
  * Print a linked list
@@ -25,22 +25,32 @@ function Trunk(prev, str) {
 }
 
 /**
- * The interface of the tree printer
- * This tree printer is borrowed from TECHIE DELIGHT
- * https://www.techiedelight.com/c-program-print-binary-tree/
- * @param root
+ * Helper function to print branches of the binary tree
+ * @param p
  */
-function printTree(root) {
-    printTree(root, null, false);
+function showTrunks(p) {
+    if (!p) {
+        return;
+    }
+
+    let result = '';
+    let trunk = p;
+    while (trunk !== null) {
+        result = trunk.str + result;
+        trunk = trunk.prev;
+    }
+
+    // 在浏览器环境中直接返回字符串，不进行打印
+    return result;
 }
 
 /**
  * Print a binary tree
- * @param root
- * @param prev
- * @param isLeft
+ * @param root 树的根节点
+ * @param prev 前一个Trunk对象
+ * @param isLeft 是否是左子树
  */
-function printTree(root, prev, isLeft) {
+function printTreeHelper(root, prev, isLeft) {
     if (root === null) {
         return;
     }
@@ -48,7 +58,7 @@ function printTree(root, prev, isLeft) {
     let prev_str = '    ';
     let trunk = new Trunk(prev, prev_str);
 
-    printTree(root.right, trunk, true);
+    printTreeHelper(root.right, trunk, true);
 
     if (!prev) {
         trunk.str = '———';
@@ -60,28 +70,25 @@ function printTree(root, prev, isLeft) {
         prev.str = prev_str;
     }
 
-    showTrunks(trunk);
-    console.log(' ' + root.val);
+    const trunkStr = showTrunks(trunk);
+    console.log(trunkStr + ' ' + root.val);
 
     if (prev) {
         prev.str = prev_str;
     }
     trunk.str = '   |';
 
-    printTree(root.left, trunk, false);
+    printTreeHelper(root.left, trunk, false);
 }
 
 /**
- * Helper function to print branches of the binary tree
- * @param p
+ * The interface of the tree printer
+ * This tree printer is borrowed from TECHIE DELIGHT
+ * https://www.techiedelight.com/c-program-print-binary-tree/
+ * @param root
  */
-function showTrunks(p) {
-    if (!p) {
-        return;
-    }
-
-    showTrunks(p.prev);
-    process.stdout.write(p.str);
+function printTree(root) {
+    printTreeHelper(root, null, false);
 }
 
 /**
@@ -95,7 +102,7 @@ function printHeap(arr) {
     printTree(arrToTree(arr));
 }
 
-module.exports = {
+export {
     printLinkedList,
     printTree,
     printHeap,

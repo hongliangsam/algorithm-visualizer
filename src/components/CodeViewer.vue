@@ -128,16 +128,17 @@ const processCodeLines = () => {
       }
       // 如果已经在代码块中且遇到console输出后的下一个注释块，则结束当前代码块
       else if (isInBlock && line.startsWith('/*') && line.endsWith('*/')) {
-        // 检查前面几行是否有console语句
-        let hasConsoleBeforeThisBlock = false;
+        // 检查前面几行是否有console语句或函数调用
+        let hasConsoleOrFuncBeforeThisBlock = false;
         for (let j = i - 1; j >= currentBlockStart && j >= i - 5; j--) {
-          if (lines[j].includes('console.')) {
-            hasConsoleBeforeThisBlock = true;
+          if (lines[j].includes('console.') ||
+              (lines[j].includes('(') && lines[j].includes(')') && !lines[j].includes('if') && !lines[j].includes('for'))) {
+            hasConsoleOrFuncBeforeThisBlock = true;
             break;
           }
         }
 
-        if (hasConsoleBeforeThisBlock) {
+        if (hasConsoleOrFuncBeforeThisBlock) {
           // 结束当前代码块
           codeBlocks.push({
             start: currentBlockStart,
@@ -505,537 +506,494 @@ const highlightTargetLine = (lineIndex) => {
   }
 };
 
-// 运行代码块
-const runCodeBlock = async (lineNumber) => {
-  if (isExecuting.value || !lineOutputs[lineNumber]) return;
+// 存储文件执行上下文，以文件名为键
+const fileExecutionContexts = {};
 
-  // 设置加载状态
-  lineOutputs[lineNumber].loading = true;
-  lineOutputs[lineNumber].logs = [];
-  lineOutputs[lineNumber].status = '';
+// 执行代码块
+const runCodeBlock = async (lineIndex) => {
+  const output = lineOutputs[lineIndex];
+  if (!output || output.loading) return;
 
-  isExecuting.value = true;
+  // 提前定义变量，确保finally块中可以访问
+  let originalConsoleLog;
+  let originalConsoleError;
+  let originalConsoleWarn;
+  let originalConsoleInfo;
+  let logs = [];
+  let allLogs = []; // 记录所有日志
 
   try {
-    const blockStart = lineOutputs[lineNumber].blockStart;
-    const blockEnd = lineOutputs[lineNumber].blockEnd;
-    const lines = code.value.split('\n');
+    // 设置加载状态
+    output.loading = true;
+    output.logs = [];
+    output.status = '';
 
-    // 获取代码块的内容
-    const blockLines = lines.slice(blockStart, blockEnd + 1);
-    const blockCode = blockLines.join('\n');
+    // 获取代码块范围
+    const blockStart = output.blockStart;
+    const blockEnd = output.blockEnd;
 
-    // 处理上下文：包含函数定义和前面代码块的变量操作，但忽略console语句
-    const contextLines = [];
-
-    // 添加当前代码块之前的所有代码行，但注释掉console语句
-    for (let i = 0; i < blockStart; i++) {
-      const line = lines[i];
-      const trimmedLine = line.trim();
-
-      // 检查是否是console语句
-      if (trimmedLine.includes('console.log') ||
-          trimmedLine.includes('console.error') ||
-          trimmedLine.includes('console.warn') ||
-          trimmedLine.includes('console.info')) {
-        // 将console语句注释掉
-        contextLines.push('// ' + line);
-      } else {
-        // 保留其他语句
-        contextLines.push(line);
+    // 查找所有代码块注释的位置
+    const commentBlocks = [];
+    for (let i = 0; i < codeLines.length; i++) {
+      const line = codeLines[i].text.trim();
+      if (line.startsWith('/*') && line.endsWith('*/')) {
+        // 查找对应代码块中第一个console.log语句的内容
+        let consoleContent = '';
+        for (let j = i + 1; j < codeLines.length; j++) {
+          if (codeLines[j].text.includes('console.log')) {
+            const match = codeLines[j].text.match(/console\.log\(\s*['"]([^'"]*)['"]/);
+            if (match && match[1]) {
+              consoleContent = match[1];
+        break;
       }
     }
 
-    const contextCode = contextLines.join('\n');
+          // 如果遇到下一个注释块，停止搜索
+          if (j > i + 1 && codeLines[j].text.trim().startsWith('/*') && codeLines[j].text.trim().endsWith('*/')) {
+          break;
+          }
+        }
 
-    // 保存原始的 console 方法
-    const originalConsoleLog = console.log;
-    const originalConsoleError = console.error;
-    const originalConsoleWarn = console.warn;
-    const originalConsoleInfo = console.info;
-    const logs = [];
+        commentBlocks.push({
+          start: i,
+          consoleContent: consoleContent
+        });
+      }
+    }
 
-    // 拦截 console 方法
+    // 找到当前代码块在数组中的位置
+    let currentBlockIndex = -1;
+    for (let i = 0; i < commentBlocks.length; i++) {
+      if (commentBlocks[i].start >= blockStart && commentBlocks[i].start <= blockEnd) {
+        currentBlockIndex = i;
+        break;
+      }
+    }
+
+    // 准备执行环境
+    // 处理代码，增加必要的类定义
+    const fullCode = `
+      // 定义必要的类
+      class Vertex {
+        constructor(val) {
+          this.val = val;
+        }
+      }
+
+      ${!code.value.includes('class GraphAdjMat') ? `
+      // 仅在用户代码中没有定义GraphAdjMat时才定义它
+      class GraphAdjMat {
+        constructor(vertices, edges) {
+          this.vertices = [...vertices];
+          this.adjMat = [];
+
+          // 初始化邻接矩阵
+          for (let i = 0; i < vertices.length; i++) {
+            const row = [];
+            for (let j = 0; j < vertices.length; j++) {
+              row.push(0);
+            }
+            this.adjMat.push(row);
+          }
+
+          // 添加边
+          for (const edge of edges) {
+            this.addEdge(edge[0], edge[1]);
+          }
+        }
+
+        size() {
+          return this.vertices.length;
+        }
+
+        addEdge(i, j) {
+          if (i < 0 || j < 0 || i >= this.vertices.length || j >= this.vertices.length || i === j) {
+            throw new Error('Invalid vertex indices');
+          }
+          this.adjMat[i][j] = 1;
+          this.adjMat[j][i] = 1;
+        }
+
+        removeEdge(i, j) {
+          if (i < 0 || j < 0 || i >= this.vertices.length || j >= this.vertices.length || i === j) {
+            throw new Error('Invalid vertex indices');
+          }
+          this.adjMat[i][j] = 0;
+          this.adjMat[j][i] = 0;
+        }
+
+        addVertex(val) {
+          this.vertices.push(val);
+
+          // 扩展邻接矩阵
+          for (let i = 0; i < this.adjMat.length; i++) {
+            this.adjMat[i].push(0);
+          }
+          const newRow = new Array(this.vertices.length).fill(0);
+          this.adjMat.push(newRow);
+        }
+
+        removeVertex(index) {
+          if (index < 0 || index >= this.vertices.length) {
+            throw new Error('Invalid vertex index');
+          }
+
+          this.vertices.splice(index, 1);
+          this.adjMat.splice(index, 1);
+          for (let i = 0; i < this.adjMat.length; i++) {
+            this.adjMat[i].splice(index, 1);
+          }
+        }
+
+        print() {
+          console.log(' 顶点列表 = ', JSON.stringify(this.vertices));
+          console.log(' 邻接矩阵 =', JSON.stringify(this.adjMat));
+        }
+      }` : '// GraphAdjMat类已在用户代码中定义'}
+
+      // 用户代码
+      ${code.value
+      .replace(/export\s*\{[^}]*\}\s*;?/g, '')
+        .replace(/import\s+\{\s*([^}]+)\s*\}\s+from\s+['"]([^'"]+)['"]/g, '// 导入已处理')}
+    `;
+
+    // 保存原始控制台方法
+    originalConsoleLog = console.log;
+    originalConsoleError = console.error;
+    originalConsoleWarn = console.warn;
+    originalConsoleInfo = console.info;
+
+    // 重写console方法以捕获输出
     console.log = (...args) => {
-      originalConsoleLog(...args);
-      logs.push({
-        type: 'log',
-        content: args.map(arg =>
-          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-        ).join(' ')
-      });
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      allLogs.push({ type: 'log', content, timestamp: Date.now() });
+      originalConsoleLog.apply(console, args);
     };
 
     console.error = (...args) => {
-      originalConsoleError(...args);
-      logs.push({
-        type: 'error',
-        content: args.map(arg =>
-          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-        ).join(' ')
-      });
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      allLogs.push({ type: 'error', content, timestamp: Date.now() });
+      originalConsoleError.apply(console, args);
     };
 
     console.warn = (...args) => {
-      originalConsoleWarn(...args);
-      logs.push({
-        type: 'warn',
-        content: args.map(arg =>
-          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-        ).join(' ')
-      });
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      allLogs.push({ type: 'warn', content, timestamp: Date.now() });
+      originalConsoleWarn.apply(console, args);
     };
 
     console.info = (...args) => {
-      originalConsoleInfo(...args);
-      logs.push({
-        type: 'info',
-        content: args.map(arg =>
-          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-        ).join(' ')
-      });
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      allLogs.push({ type: 'info', content, timestamp: Date.now() });
+      originalConsoleInfo.apply(console, args);
     };
 
-    // 执行代码
-    try {
-      // 准备模块数据
-      const moduleData = {};
-      Object.keys(moduleFiles).forEach(path => {
-        const moduleName = path.split('/').pop().replace('.js', '');
-        moduleData[moduleName] = moduleFiles[path];
-      });
+    // 执行整个代码
+    new Function(fullCode)();
 
-      // 创建沙箱代码
-      let sandboxCode = '(function() {';
-      sandboxCode += '"use strict";';
+    // 获取当前代码块的console标识内容
+    const currentConsoleContent = currentBlockIndex >= 0 ? commentBlocks[currentBlockIndex].consoleContent : '';
 
-      // 创建模块缓存
-      sandboxCode += 'const moduleCache = ' + JSON.stringify(moduleData) + ';';
+    // 获取下一个代码块的console标识内容
+    const nextConsoleContent = currentBlockIndex >= 0 && currentBlockIndex < commentBlocks.length - 1
+      ? commentBlocks[currentBlockIndex + 1].consoleContent
+      : '';
 
-      // 模拟Node.js环境
-      sandboxCode +=
-        '// 模拟Node.js环境\n' +
-        'const process = {\n' +
-        '  env: {},\n' +
-        '  nextTick: function(callback) { setTimeout(callback, 0); },\n' +
-        '  cwd: function() { return "/"; },\n' +
-        '  argv: [],\n' +
-        '  version: "v14.17.0",\n' +
-        '  versions: { node: "14.17.0" },\n' +
-        '  platform: "browser",\n' +
-        '  exit: function() {},\n' +
-        '  stdout: {\n' +
-        '    write: function(text) {\n' +
-        '      console.log(text);\n' +
-        '      return true;\n' +
-        '    }\n' +
-        '  },\n' +
-        '  stderr: {\n' +
-        '    write: function(text) {\n' +
-        '      console.error(text);\n' +
-        '      return true;\n' +
-        '    }\n' +
-        '  }\n' +
-        '};\n' +
-        '\n' +
-        '// 模拟全局对象\n' +
-        'const global = window;\n' +
-        'const __dirname = "/";\n' +
-        'const __filename = "current_file.js";\n';
+    // 确定日志截取范围
+    let startIndex = -1;
+    let endIndex = allLogs.length;
 
-      // 创建模拟的 require 函数
-      sandboxCode +=
-        '// 创建模拟的 require 函数\n' +
-        'const require = function(modulePath) {\n' +
-        '  // 从路径中提取模块名\n' +
-        '  const moduleName = modulePath.includes("/")\n' +
-        '    ? modulePath.split("/").pop()\n' +
-        '    : modulePath;\n' +
-        '\n' +
-        '  // 如果模块缓存中有该模块\n' +
-        '  if (moduleCache[moduleName]) {\n' +
-        '    // 从模块内容创建模块\n' +
-        '    const moduleContent = moduleCache[moduleName];\n' +
-        '    const moduleExports = {};\n' +
-        '    const module = { exports: moduleExports };\n' +
-        '\n' +
-        '    // 执行模块代码\n' +
-        '    try {\n' +
-        '      const moduleFn = new Function("module", "exports", "require", "process", "global", "__dirname", "__filename", moduleContent);\n' +
-        '      moduleFn(module, module.exports, require, process, global, __dirname, __filename);\n' +
-        '      return module.exports;\n' +
-        '    } catch (error) {\n' +
-        '      console.error("加载模块 " + moduleName + " 失败: " + error.message);\n' +
-        '      return {};\n' +
-        '    }\n' +
-        '  }\n' +
-        '\n' +
-        '  // 模拟一些常用模块\n' +
-        '  switch (modulePath) {\n' +
-        '    case "./ListNode":\n' +
-        '    case "../modules/ListNode":\n' +
-        '      return {\n' +
-        '        ListNode: class ListNode {\n' +
-        '          constructor(val, next = null) {\n' +
-        '            this.val = val;\n' +
-        '            this.next = next;\n' +
-        '          }\n' +
-        '        }\n' +
-        '      };\n' +
-        '    case "./TreeNode":\n' +
-        '    case "../modules/TreeNode":\n' +
-        '      return {\n' +
-        '        TreeNode: class TreeNode {\n' +
-        '          constructor(val, left = null, right = null) {\n' +
-        '            this.val = val;\n' +
-        '            this.left = left;\n' +
-        '            this.right = right;\n' +
-        '          }\n' +
-        '        }\n' +
-        '      };\n' +
-        '    case "./PrintUtil":\n' +
-        '    case "../modules/PrintUtil":\n' +
-        '      return {\n' +
-        '        printLinkedList: (head) => {\n' +
-        '          let result = "";\n' +
-        '          let current = head;\n' +
-        '          while (current) {\n' +
-        '            result += current.val + " -> ";\n' +
-        '            current = current.next;\n' +
-        '          }\n' +
-        '          console.log(result + "null");\n' +
-        '          return result + "null";\n' +
-        '        },\n' +
-        '        printTree: (root) => {\n' +
-        '          // 更简单、更紧凑的树形打印函数\n' +
-        '          const printBinaryTreeSimple = (node) => {\n' +
-        '            if (!node) return "null";\n' +
-        '            \n' +
-        '            // 将树转换为普通JavaScript对象\n' +
-        '            function treeToObject(n) {\n' +
-        '              if (!n) return null;\n' +
-        '              return {\n' +
-        '                value: n.val,\n' +
-        '                left: treeToObject(n.left),\n' +
-        '                right: treeToObject(n.right)\n' +
-        '              };\n' +
-        '            }\n' +
-        '            \n' +
-        '            return JSON.stringify(treeToObject(node));\n' +
-        '          };\n' +
-        '          \n' +
-        '          const treeStr = printBinaryTreeSimple(root);\n' +
-        '          console.log("Binary Tree:");\n' +
-        '          console.log(treeStr);\n' +
-        '          return treeStr;\n' +
-        '        },\n' +
-        '        printHeap: (arr) => {\n' +
-        '          console.log("堆的数组表示：");\n' +
-        '          console.log(arr);\n' +
-        '          console.log("堆的树状表示：");\n' +
-        '          const heapTreeStr = arr.reduce((acc, val, idx) => {\n' +
-        '            return acc + idx + ": " + val + "\\n";\n' +
-        '          }, "");\n' +
-        '          console.log(heapTreeStr);\n' +
-        '          return heapTreeStr;\n' +
-        '        }\n' +
-        '      };\n' +
-        '    case "./Vertex":\n' +
-        '    case "../modules/Vertex":\n' +
-        '      return {\n' +
-        '        Vertex: class Vertex {\n' +
-        '          constructor(val) {\n' +
-        '            this.val = val;\n' +
-        '            this.neighbors = [];\n' +
-        '          }\n' +
-        '\n' +
-        '          addNeighbor(vertex) {\n' +
-        '            this.neighbors.push(vertex);\n' +
-        '          }\n' +
-        '        }\n' +
-        '      };\n' +
-        '    default:\n' +
-        '      console.warn("模块 \'" + modulePath + "\' 未找到，返回空对象");\n' +
-        '      return {};\n' +
-        '  }\n' +
-        '};\n';
+    // 查找当前代码块第一个console的输出位置
+    if (currentConsoleContent) {
+          for (let i = 0; i < allLogs.length; i++) {
+        if (allLogs[i].content.includes(currentConsoleContent)) {
+          startIndex = i;
+              break;
+            }
+          }
+        }
 
-      // 添加代码执行部分
-      sandboxCode += '// 执行代码\n' + code.value + '\n})();';
-
-      // 使用 Function 构造器运行代码
-      new Function(sandboxCode)();
-
-      // 设置成功状态
-      lineOutputs[lineNumber].status = 'success';
-    } catch (err) {
-      logs.push({
-        type: 'error',
-        content: err.toString()
-      });
-
-      // 设置错误状态
-      lineOutputs[lineNumber].status = 'error';
+    // 查找下一个代码块第一个console的输出位置
+    if (nextConsoleContent) {
+              for (let i = 0; i < allLogs.length; i++) {
+        if (allLogs[i].content.includes(nextConsoleContent)) {
+          endIndex = i;
+                  break;
+        }
+      }
     }
 
-    // 恢复原始的 console 方法
-    console.log = originalConsoleLog;
-    console.error = originalConsoleError;
-    console.warn = originalConsoleWarn;
-    console.info = originalConsoleInfo;
+    // 如果找不到精确匹配，使用更宽松的匹配
+    if (startIndex === -1) {
+      // 尝试提取当前代码块中所有console.log语句
+      for (let i = blockStart; i <= blockEnd; i++) {
+        const line = codeLines[i].text;
+        if (line.includes('console.log')) {
+          // 提取console.log中的参数
+          const match = line.match(/console\.log\(([^)]+)\)/);
+          if (match && match[1]) {
+            const params = match[1].trim().replace(/['"]/g, '');
+            // 在日志中查找匹配
+            for (let j = 0; j < allLogs.length; j++) {
+              if (allLogs[j].content.includes(params)) {
+                startIndex = j;
+              break;
+            }
+          }
+            if (startIndex !== -1) break;
+          }
+        }
+      }
+    }
 
-    // 更新输出
-    lineOutputs[lineNumber].logs = logs;
+    // 如果仍然找不到起始位置，使用默认值
+    if (startIndex === -1 && allLogs.length > 0) {
+      startIndex = 0;
+    }
+
+    // 截取日志
+    if (startIndex !== -1) {
+      logs = allLogs.slice(startIndex, endIndex);
+    }
+
+    // 如果没有输出，添加一个默认消息
+    if (logs.length === 0) {
+      logs.push({ type: 'info', content: '代码块执行成功，但没有找到匹配的输出' });
+    }
+
+    // 更新输出状态
+    output.status = 'success';
+    output.logs = logs;
+
+  } catch (err) {
+    console.error('执行代码块时出错:', err);
+    output.logs.push({
+      type: 'error',
+      content: err.toString()
+    });
+    output.status = 'error';
   } finally {
-    lineOutputs[lineNumber].loading = false;
-    isExecuting.value = false;
+    // 恢复原始的 console 方法
+    if (originalConsoleLog) console.log = originalConsoleLog;
+    if (originalConsoleError) console.error = originalConsoleError;
+    if (originalConsoleWarn) console.warn = originalConsoleWarn;
+    if (originalConsoleInfo) console.info = originalConsoleInfo;
+
+    // 结束加载状态
+    output.loading = false;
   }
 };
 
-// 运行全部代码
+// 执行代码（整个文件）
 const runCode = async () => {
   if (isExecuting.value) return;
 
-  consoleOutput.value = [];
-  isExecuting.value = true;
-  outputClass.value = '';
+  // 在try之前定义变量，确保finally块中可以访问
+  let originalConsoleLog;
+  let originalConsoleError;
+  let originalConsoleWarn;
+  let originalConsoleInfo;
+  let logs = [];
 
   try {
-    // 保存原始的 console 方法
-    const originalConsoleLog = console.log;
-    const originalConsoleError = console.error;
-    const originalConsoleWarn = console.warn;
-    const originalConsoleInfo = console.info;
-    const logs = [];
+    isExecuting.value = true;
+    consoleOutput.value = [];
+    outputClass.value = '';
 
-    // 拦截 console 方法
-    console.log = (...args) => {
-      originalConsoleLog(...args);
-      logs.push({
-        type: 'log',
-        content: args.map(arg =>
-          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-        ).join(' ')
+    // 处理代码，移除类定义和export语句
+    let processedCode = code.value
+      // 移除export语句
+      .replace(/export\s*\{[^}]*\}\s*;?/g, '')
+      // 移除Vertex和GraphAdjList类定义，防止重复声明
+      .replace(/class\s+Vertex\s+\{[\s\S]*?\n\}/g, '/* Vertex类已由模拟器提供 */')
+      .replace(/class\s+GraphAdjList\s+\{[\s\S]*?\n\}/g, '/* GraphAdjList类已由模拟器提供 */')
+      // 转换import语句为注释
+      .replace(/import\s+\{\s*([^}]+)\s*\}\s+from\s+['"]([^'"]+)['"]/g, (match, imports, path) => {
+        return `// 导入已由模拟器提供：${imports}`;
       });
+
+    // 准备日志收集
+    logs = [];
+    originalConsoleLog = console.log;
+    originalConsoleError = console.error;
+    originalConsoleWarn = console.warn;
+    originalConsoleInfo = console.info;
+
+    // 重写控制台方法
+    console.log = (...args) => {
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      logs.push({ type: 'log', content });
     };
 
     console.error = (...args) => {
-      originalConsoleError(...args);
-      logs.push({
-        type: 'error',
-        content: args.map(arg =>
-          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-        ).join(' ')
-      });
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      logs.push({ type: 'error', content });
+      originalConsoleError.apply(console, args);
     };
 
     console.warn = (...args) => {
-      originalConsoleWarn(...args);
-      logs.push({
-        type: 'warn',
-        content: args.map(arg =>
-          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-        ).join(' ')
-      });
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      logs.push({ type: 'warn', content });
+      originalConsoleWarn.apply(console, args);
     };
 
     console.info = (...args) => {
-      originalConsoleInfo(...args);
-      logs.push({
-        type: 'info',
-        content: args.map(arg =>
-          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-        ).join(' ')
-      });
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      logs.push({ type: 'info', content });
+      originalConsoleInfo.apply(console, args);
     };
 
+    // 在沙箱环境中提供模拟类
+    const sandboxCode = `
+      // 定义Vertex类
+      class Vertex {
+        constructor(val) {
+          this.val = val;
+        }
+
+        static valsToVets(vals) {
+          const vets = [];
+          for (let i = 0; i < vals.length; i++) {
+            vets[i] = new Vertex(vals[i]);
+          }
+          return vets;
+        }
+
+        static vetsToVals(vets) {
+          const vals = [];
+          for (const vet of vets) {
+            vals.push(vet.val);
+          }
+          return vals;
+        }
+      }
+
+      // 定义GraphAdjList类
+      class GraphAdjList {
+        constructor(edges) {
+          this.adjList = new Map();
+          // 添加所有顶点和边
+          if (edges) {
+            for (const edge of edges) {
+              this.addVertex(edge[0]);
+              this.addVertex(edge[1]);
+              this.addEdge(edge[0], edge[1]);
+            }
+          }
+        }
+
+        size() {
+          return this.adjList.size;
+        }
+
+        addEdge(vet1, vet2) {
+          if (
+            !this.adjList.has(vet1) ||
+            !this.adjList.has(vet2) ||
+            vet1 === vet2
+          ) {
+            throw new Error('Illegal Argument Exception');
+          }
+          // 添加边 vet1 - vet2
+          this.adjList.get(vet1).push(vet2);
+          this.adjList.get(vet2).push(vet1);
+        }
+
+        removeEdge(vet1, vet2) {
+          if (
+            !this.adjList.has(vet1) ||
+            !this.adjList.has(vet2) ||
+            vet1 === vet2
+          ) {
+            throw new Error('Illegal Argument Exception');
+          }
+          // 删除边 vet1 - vet2
+          this.adjList.get(vet1).splice(this.adjList.get(vet1).indexOf(vet2), 1);
+          this.adjList.get(vet2).splice(this.adjList.get(vet2).indexOf(vet1), 1);
+        }
+
+        addVertex(vet) {
+          if (this.adjList.has(vet)) return;
+          // 在邻接表中添加一个新链表
+          this.adjList.set(vet, []);
+        }
+
+        removeVertex(vet) {
+          if (!this.adjList.has(vet)) {
+            throw new Error('Illegal Argument Exception');
+          }
+          // 在邻接表中删除顶点 vet 对应的链表
+          this.adjList.delete(vet);
+          // 遍历其他顶点的链表，删除所有包含 vet 的边
+          for (let set of this.adjList.values()) {
+            const index = set.indexOf(vet);
+            if (index > -1) {
+              set.splice(index, 1);
+            }
+          }
+        }
+
+        print() {
+          console.log('邻接表 =');
+          for (const [key, value] of this.adjList) {
+            const tmp = [];
+            for (const vertex of value) {
+              tmp.push(vertex.val);
+            }
+            console.log(key.val + ': ' + tmp.join(','));
+          }
+        }
+      }
+
+      // 执行用户代码
+      try {
+        ${processedCode}
+
+        // 检查是否存在runExample函数并执行
+        if (typeof runExample === 'function') {
+          runExample();
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    `;
+
     // 执行代码
-    try {
-      // 准备模块数据
-      const moduleData = {};
-      Object.keys(moduleFiles).forEach(path => {
-        const moduleName = path.split('/').pop().replace('.js', '');
-        moduleData[moduleName] = moduleFiles[path];
-      });
-
-      // 创建沙箱代码
-      let sandboxCode = '(function() {';
-      sandboxCode += '"use strict";';
-
-      // 创建模块缓存
-      sandboxCode += 'const moduleCache = ' + JSON.stringify(moduleData) + ';';
-
-      // 模拟Node.js环境
-      sandboxCode +=
-        '// 模拟Node.js环境\n' +
-        'const process = {\n' +
-        '  env: {},\n' +
-        '  nextTick: function(callback) { setTimeout(callback, 0); },\n' +
-        '  cwd: function() { return "/"; },\n' +
-        '  argv: [],\n' +
-        '  version: "v14.17.0",\n' +
-        '  versions: { node: "14.17.0" },\n' +
-        '  platform: "browser",\n' +
-        '  exit: function() {},\n' +
-        '  stdout: {\n' +
-        '    write: function(text) {\n' +
-        '      console.log(text);\n' +
-        '      return true;\n' +
-        '    }\n' +
-        '  },\n' +
-        '  stderr: {\n' +
-        '    write: function(text) {\n' +
-        '      console.error(text);\n' +
-        '      return true;\n' +
-        '    }\n' +
-        '  }\n' +
-        '};\n' +
-        '\n' +
-        '// 模拟全局对象\n' +
-        'const global = window;\n' +
-        'const __dirname = "/";\n' +
-        'const __filename = "current_file.js";\n';
-
-      // 创建模拟的 require 函数
-      sandboxCode +=
-        '// 创建模拟的 require 函数\n' +
-        'const require = function(modulePath) {\n' +
-        '  // 从路径中提取模块名\n' +
-        '  const moduleName = modulePath.includes("/")\n' +
-        '    ? modulePath.split("/").pop()\n' +
-        '    : modulePath;\n' +
-        '\n' +
-        '  // 如果模块缓存中有该模块\n' +
-        '  if (moduleCache[moduleName]) {\n' +
-        '    // 从模块内容创建模块\n' +
-        '    const moduleContent = moduleCache[moduleName];\n' +
-        '    const moduleExports = {};\n' +
-        '    const module = { exports: moduleExports };\n' +
-        '\n' +
-        '    // 执行模块代码\n' +
-        '    try {\n' +
-        '      const moduleFn = new Function("module", "exports", "require", "process", "global", "__dirname", "__filename", moduleContent);\n' +
-        '      moduleFn(module, module.exports, require, process, global, __dirname, __filename);\n' +
-        '      return module.exports;\n' +
-        '    } catch (error) {\n' +
-        '      console.error("加载模块 " + moduleName + " 失败: " + error.message);\n' +
-        '      return {};\n' +
-        '    }\n' +
-        '  }\n' +
-        '\n' +
-        '  // 模拟一些常用模块\n' +
-        '  switch (modulePath) {\n' +
-        '    case "./ListNode":\n' +
-        '    case "../modules/ListNode":\n' +
-        '      return {\n' +
-        '        ListNode: class ListNode {\n' +
-        '          constructor(val, next = null) {\n' +
-        '            this.val = val;\n' +
-        '            this.next = next;\n' +
-        '          }\n' +
-        '        }\n' +
-        '      };\n' +
-        '    case "./TreeNode":\n' +
-        '    case "../modules/TreeNode":\n' +
-        '      return {\n' +
-        '        TreeNode: class TreeNode {\n' +
-        '          constructor(val, left = null, right = null) {\n' +
-        '            this.val = val;\n' +
-        '            this.left = left;\n' +
-        '            this.right = right;\n' +
-        '          }\n' +
-        '        }\n' +
-        '      };\n' +
-        '    case "./PrintUtil":\n' +
-        '    case "../modules/PrintUtil":\n' +
-        '      return {\n' +
-        '        printLinkedList: (head) => {\n' +
-        '          let result = "";\n' +
-        '          let current = head;\n' +
-        '          while (current) {\n' +
-        '            result += current.val + " -> ";\n' +
-        '            current = current.next;\n' +
-        '          }\n' +
-        '          console.log(result + "null");\n' +
-        '          return result + "null";\n' +
-        '        },\n' +
-        '        printTree: (root) => {\n' +
-        '          // 更简单、更紧凑的树形打印函数\n' +
-        '          const printBinaryTreeSimple = (node) => {\n' +
-        '            if (!node) return "null";\n' +
-        '            \n' +
-        '            // 将树转换为普通JavaScript对象\n' +
-        '            function treeToObject(n) {\n' +
-        '              if (!n) return null;\n' +
-        '              return {\n' +
-        '                value: n.val,\n' +
-        '                left: treeToObject(n.left),\n' +
-        '                right: treeToObject(n.right)\n' +
-        '              };\n' +
-        '            }\n' +
-        '            \n' +
-        '            return JSON.stringify(treeToObject(node));\n' +
-        '          };\n' +
-        '          \n' +
-        '          const treeStr = printBinaryTreeSimple(root);\n' +
-        '          console.log("Binary Tree:");\n' +
-        '          console.log(treeStr);\n' +
-        '          return treeStr;\n' +
-        '        },\n' +
-        '        printHeap: (arr) => {\n' +
-        '          console.log("堆的数组表示：");\n' +
-        '          console.log(arr);\n' +
-        '          console.log("堆的树状表示：");\n' +
-        '          const heapTreeStr = arr.reduce((acc, val, idx) => {\n' +
-        '            return acc + idx + ": " + val + "\\n";\n' +
-        '          }, "");\n' +
-        '          console.log(heapTreeStr);\n' +
-        '          return heapTreeStr;\n' +
-        '        }\n' +
-        '      };\n' +
-        '    case "./Vertex":\n' +
-        '    case "../modules/Vertex":\n' +
-        '      return {\n' +
-        '        Vertex: class Vertex {\n' +
-        '          constructor(val) {\n' +
-        '            this.val = val;\n' +
-        '            this.neighbors = [];\n' +
-        '          }\n' +
-        '\n' +
-        '          addNeighbor(vertex) {\n' +
-        '            this.neighbors.push(vertex);\n' +
-        '          }\n' +
-        '        }\n' +
-        '      };\n' +
-        '    default:\n' +
-        '      console.warn("模块 \'" + modulePath + "\' 未找到，返回空对象");\n' +
-        '      return {};\n' +
-        '  }\n' +
-        '};\n';
-
-      // 添加代码执行部分
-      sandboxCode += '// 执行代码\n' + code.value + '\n})();';
-
-      // 使用 Function 构造器运行代码
-      new Function(sandboxCode)();
-      outputClass.value = 'success';
-    } catch (err) {
-      logs.push({
-        type: 'error',
-        content: err.toString()
-      });
-      outputClass.value = 'error';
-    }
-
-    // 恢复原始的 console 方法
-    console.log = originalConsoleLog;
-    console.error = originalConsoleError;
-    console.warn = originalConsoleWarn;
-    console.info = originalConsoleInfo;
+    new Function('console', sandboxCode)(console);
 
     // 更新控制台输出
     consoleOutput.value = logs;
+    outputClass.value = 'success';
+  } catch (err) {
+    console.error('执行代码时出错:', err);
+    consoleOutput.value.push({
+      type: 'error',
+      content: err.toString()
+    });
+    outputClass.value = 'error';
   } finally {
+    // 恢复原始的console方法
+    if (originalConsoleLog) console.log = originalConsoleLog;
+    if (originalConsoleError) console.error = originalConsoleError;
+    if (originalConsoleWarn) console.warn = originalConsoleWarn;
+    if (originalConsoleInfo) console.info = originalConsoleInfo;
+
     isExecuting.value = false;
   }
 };

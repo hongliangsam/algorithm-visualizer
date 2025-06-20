@@ -44,7 +44,7 @@ function getListNode(head, val) {
     return head;
 }
 
-module.exports = {
+export {
     ListNode,
     arrToLinkedList,
     getListNode,

@@ -4,8 +4,30 @@
  * Author: IsChristina (christinaxia77@foxmail.com), Justin (xiefahit@gmail.com)
  */
 
-const { printLinkedList } = require('../modules/PrintUtil');
-const { ListNode } = require('../modules/ListNode');
+// 内联ListNode类定义
+/**
+ * Definition for a singly-linked list node
+ */
+class ListNode {
+    constructor(val, next) {
+        this.val = val === undefined ? 0 : val;
+        this.next = next === undefined ? null : next;
+    }
+}
+
+// 内联printLinkedList函数
+/**
+ * Print a linked list
+ * @param head
+ */
+function printLinkedList(head) {
+    let list = [];
+    while (head !== null) {
+        list.push(head.val.toString());
+        head = head.next;
+    }
+    console.log(list.join(' -> '));
+}
 
 /* 在链表的节点 n0 之后插入节点 P */
 function insert(n0, P) {

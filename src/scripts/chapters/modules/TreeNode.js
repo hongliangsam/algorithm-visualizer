@@ -48,7 +48,7 @@ function arrToTree(arr) {
     return root;
 }
 
-module.exports = {
+export {
     TreeNode,
     arrToTree,
 };

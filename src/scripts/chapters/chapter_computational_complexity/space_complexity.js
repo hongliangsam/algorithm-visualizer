@@ -4,9 +4,27 @@
  * Author: Justin (xiefahit@gmail.com)
  */
 
-const { ListNode } = require('../modules/ListNode');
-const { TreeNode } = require('../modules/TreeNode');
-// const { printTree } = require('../modules/PrintUtil');
+// 直接在文件内定义需要的类，以避免模块导入问题
+/**
+ * 链表节点类
+ */
+class ListNode {
+    constructor(val, next) {
+        this.val = val === undefined ? 0 : val;
+        this.next = next === undefined ? null : next;
+    }
+}
+
+/**
+ * 二叉树节点类
+ */
+class TreeNode {
+    constructor(val, left, right) {
+        this.val = val === undefined ? 0 : val;
+        this.left = left === undefined ? null : left;
+        this.right = right === undefined ? null : right;
+    }
+}
 
 /* 函数 */
 function constFunc() {
