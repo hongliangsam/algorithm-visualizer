@@ -90,12 +90,86 @@ function buildTree(n) {
 
 // 简单的树打印函数
 function simplePrintTree(node) {
-  if (!node) return null;
-  return {
-    val: node.val,
-    left: simplePrintTree(node.left),
-    right: simplePrintTree(node.right)
-  };
+    if (!node) return null;
+    return {
+        val: node.val,
+        left: simplePrintTree(node.left),
+        right: simplePrintTree(node.right)
+    };
+}
+
+// ASCII树形显示函数
+function asciiTree(root) {
+    if (!root) return '';
+
+    // 获取树的深度
+    function getDepth(node) {
+        if (!node) return 0;
+        return 1 + Math.max(getDepth(node.left), getDepth(node.right));
+    }
+
+    const depth = getDepth(root);
+    // 字符宽度估计值
+    const width = Math.pow(2, depth) * 3;
+
+    // 创建一个二维字符数组表示树
+    const matrix = Array(depth * 2).fill().map(() => Array(width).fill(' '));
+
+    // 递归填充矩阵
+    function fillMatrix(node, row, left, right) {
+        if (!node) return;
+
+        const mid = Math.floor((left + right) / 2);
+
+        // 填充当前节点值
+        const valStr = String(node.val);
+        const valPos = mid - Math.floor(valStr.length / 2);
+        for (let i = 0; i < valStr.length; i++) {
+            matrix[row][valPos + i] = valStr[i];
+        }
+
+        // 处理左子树
+        if (node.left) {
+            const leftMid = Math.floor((left + mid) / 2);
+            // 画左连接线
+            for (let i = leftMid + 1; i < mid; i++) {
+                matrix[row + 1][i] = '_';
+            }
+            matrix[row + 1][leftMid] = '/';
+
+            // 处理左子树
+            fillMatrix(node.left, row + 2, left, mid - 1);
+        }
+
+        // 处理右子树
+        if (node.right) {
+            const rightMid = Math.floor((mid + right) / 2);
+            // 画右连接线
+            for (let i = mid + 1; i < rightMid; i++) {
+                matrix[row + 1][i] = '_';
+            }
+            matrix[row + 1][rightMid] = '\\';
+
+            // 处理右子树
+            fillMatrix(node.right, row + 2, mid + 1, right);
+        }
+    }
+
+    // 填充矩阵
+    fillMatrix(root, 0, 0, width - 1);
+
+    // 将矩阵转换为字符串
+    let result = '';
+    for (const row of matrix) {
+        // 删除每行末尾的空格
+        let line = row.join('').replace(/\s+$/, '');
+        // 只有当行不为空时才添加
+        if (line.trim().length > 0) {
+            result += line + '\n';
+        }
+    }
+
+    return result;
 }
 
 /* Driver Code */
@@ -110,6 +184,10 @@ quadratic(n);
 quadraticRecur(n);
 // 指数阶
 const root = buildTree(n);
-// 使用简单的方式打印树
-console.log("Binary Tree Structure:");
+// 使用ASCII方式打印树
+console.log("Binary Tree ASCII Structure:");
+console.log(asciiTree(root));
+
+// 同时显示JSON格式的树结构
+console.log("\nBinary Tree JSON Structure:");
 console.log(JSON.stringify(simplePrintTree(root), null, 2));
