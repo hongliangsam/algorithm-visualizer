@@ -1,10 +1,17 @@
 <script setup>
-import { ref, onMounted, watch, reactive, computed } from 'vue';
+import { ref, onMounted, watch, reactive, computed, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
 import 'prismjs/components/prism-javascript';
 import { VideoPlay, Download, Share, CaretTop, CaretBottom } from '@element-plus/icons-vue';
+import tippy from 'tippy.js';
+import 'tippy.js/dist/tippy.css';
+
+// 添加函数定义和调用的存储结构
+const functionDefinitions = ref({}); // 存储函数定义信息
+const linePositions = ref([]); // 存储行位置信息，用于跳转
+const highlightedLine = ref(null); // 添加高亮行引用
 
 // 导入所有章节文件
 // 使用 Vite 的动态导入功能
@@ -43,6 +50,7 @@ const fetchFileContent = async (path) => {
   // 清空之前的数据
   codeLines.length = 0;
   Object.keys(lineOutputs).forEach(key => delete lineOutputs[key]);
+  functionDefinitions.value = {};
 
   try {
     // 构建文件路径
@@ -57,6 +65,11 @@ const fetchFileContent = async (path) => {
 
       // 处理代码行
       processCodeLines();
+
+            // 解析函数定义
+      parseFunctionDefinitions();
+
+      // 稍后会通过watch触发工具提示初始化
     } else {
       // 未找到匹配的文件，显示错误信息
       code.value = `// 找不到文件: ${path}\n// 请检查文件路径是否正确`;
@@ -188,10 +201,281 @@ const processCodeLines = () => {
   }
 };
 
+// 解析代码中的函数定义
+const parseFunctionDefinitions = () => {
+  if (!code.value) return;
+
+  functionDefinitions.value = {};
+  const lines = code.value.split('\n');
+
+  console.log('开始解析函数定义:', fileName.value);
+
+  // 正则表达式匹配不同的函数定义方式
+  const functionPatterns = [
+    // function declaration: function name(...) {...}
+    { regex: /function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(([^)]*)\)/, type: 'declaration' },
+    // function expression: const/let/var name = function(...) {...}
+    { regex: /(const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*function\s*\(([^)]*)\)/, type: 'expression' },
+    // arrow function: const/let/var name = (...) => {...}
+    { regex: /(const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*\(([^)]*)\)\s*=>/, type: 'arrow' },
+    // class method: methodName(...) {...}
+    { regex: /([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(([^)]*)\)\s*{/, type: 'method' }
+  ];
+
+  // 存储每个函数的定义行号和参数
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // 跳过明显是注释的行
+    if (line.trim().startsWith('//') || line.trim().startsWith('*')) {
+      continue;
+    }
+
+    for (const pattern of functionPatterns) {
+      const match = line.match(pattern.regex);
+
+      if (match) {
+        let funcName, params;
+
+        if (pattern.type === 'declaration') {
+          funcName = match[1];
+          params = match[2];
+        } else if (pattern.type === 'expression') {
+          funcName = match[2];
+          params = match[3];
+        } else if (pattern.type === 'arrow') {
+          funcName = match[2];
+          params = match[3];
+        } else if (pattern.type === 'method') {
+          funcName = match[1];
+          params = match[2];
+
+          // 跳过for循环等非函数定义
+          if (funcName === 'for' || funcName === 'if' || funcName === 'while' || funcName === 'switch') {
+            continue;
+          }
+        }
+
+        // 获取函数定义的上下文（包括注释）
+        let startLine = i;
+        // 向上查找注释
+        while (startLine > 0) {
+          const prevLine = lines[startLine - 1].trim();
+          if (prevLine.startsWith('//') || prevLine.startsWith('/*') || prevLine.startsWith('*')) {
+            startLine--;
+          } else {
+            break;
+          }
+        }
+
+        // 提取函数定义的代码块
+        let endLine = i;
+        let braceCount = line.split('{').length - line.split('}').length;
+
+        // 如果第一行有未闭合的花括号，继续向下查找
+        if (braceCount > 0) {
+          for (let j = i + 1; j < lines.length; j++) {
+            const nextLine = lines[j];
+            braceCount += nextLine.split('{').length - nextLine.split('}').length;
+
+            if (braceCount <= 0) {
+              endLine = j;
+              break;
+            }
+          }
+        }
+
+        // 构建函数定义对象
+        const definition = {
+          name: funcName,
+          params: params.split(',').map(p => p.trim()).filter(p => p),
+          startLine: startLine,
+          endLine: endLine,
+          lineNumber: i,
+          definitionText: lines.slice(startLine, endLine + 1).join('\n')
+        };
+
+        functionDefinitions.value[funcName] = definition;
+        break; // 找到一个匹配后不再继续
+      }
+    }
+  }
+
+  // 存储所有行的位置信息，用于跳转
+  nextTick(() => {
+    const codeLineElements = document.querySelectorAll('.code-line');
+    linePositions.value = Array.from(codeLineElements).map(el => {
+      const rect = el.getBoundingClientRect();
+      return {
+        top: rect.top,
+        height: rect.height
+      };
+    });
+  });
+
+  console.log('解析到的函数定义:', functionDefinitions.value);
+
+  // 将函数定义信息存储在window对象上，方便调试
+  window._functionDefinitions = functionDefinitions.value;
+};
+
+// 从HTML内容中提取纯文本内容（移除HTML标签）
+const stripHtml = (html) => {
+  const tmp = document.createElement('DIV');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+};
+
 // 获取代码行的高亮HTML
 const getHighlightedLine = (line) => {
-  const html = Prism.highlight(line, Prism.languages.javascript, 'javascript');
-  return html;
+  try {
+    // 使用Prism进行基本的语法高亮
+    const html = Prism.highlight(line, Prism.languages.javascript, 'javascript');
+
+    // 返回高亮后的HTML
+    return html;
+  } catch (error) {
+    console.error('高亮处理出错:', error);
+    // 出错时返回原始行
+    return line;
+  }
+};
+
+// 在DOM更新后处理函数调用高亮
+const processCodeLineHighlighting = () => {
+  nextTick(() => {
+    // 确保已经解析了函数定义
+    if (Object.keys(functionDefinitions.value).length === 0) {
+      return;
+    }
+
+    // 获取所有代码行内容
+    const codeLineContents = document.querySelectorAll('.line-content');
+
+    // 遍历每一行
+    codeLineContents.forEach(lineElement => {
+      // 获取行的文本内容
+      const lineText = lineElement.textContent || '';
+
+      // 遍历所有函数定义
+      for (const funcName of Object.keys(functionDefinitions.value)) {
+        // 检查这一行是否包含函数调用
+        if (lineText.includes(funcName + '(')) {
+          // 获取函数定义的HTML内容
+          const funcDef = functionDefinitions.value[funcName];
+          const tooltip = funcDef.definitionText
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .substring(0, 1000);
+
+          // 使用DOM操作直接处理函数调用
+          const textNodes = [];
+          lineElement.childNodes.forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE) {
+              textNodes.push(node);
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+              // 检查元素节点内的文本
+              const nodeText = node.textContent || '';
+              if (nodeText === funcName &&
+                  lineElement.textContent.substring(
+                    lineElement.textContent.indexOf(nodeText) + nodeText.length,
+                    lineElement.textContent.indexOf(nodeText) + nodeText.length + 1
+                  ) === '(') {
+                // 创建高亮元素
+                const highlightSpan = document.createElement('span');
+                highlightSpan.className = 'function-call-highlight';
+                highlightSpan.setAttribute('data-function', funcName);
+                highlightSpan.setAttribute('data-tippy-content', tooltip);
+                highlightSpan.textContent = funcName;
+
+                // 添加点击事件
+                highlightSpan.onclick = () => jumpToFunction(funcName);
+
+                // 替换原始节点
+                node.parentNode.replaceChild(highlightSpan, node);
+              }
+            }
+          });
+
+          // 处理文本节点
+          textNodes.forEach(textNode => {
+            const text = textNode.textContent;
+            const parts = text.split(funcName + '(');
+
+            if (parts.length > 1) {
+              // 创建文档片段
+              const fragment = document.createDocumentFragment();
+
+              // 添加第一部分
+              if (parts[0]) {
+                fragment.appendChild(document.createTextNode(parts[0]));
+              }
+
+              // 遍历剩余部分
+              for (let i = 1; i < parts.length; i++) {
+                // 创建高亮元素
+                const highlightSpan = document.createElement('span');
+                highlightSpan.className = 'function-call-highlight';
+                highlightSpan.setAttribute('data-function', funcName);
+                highlightSpan.setAttribute('data-tippy-content', tooltip);
+                highlightSpan.textContent = funcName;
+
+                // 添加点击事件
+                highlightSpan.onclick = () => jumpToFunction(funcName);
+
+                // 添加到片段
+                fragment.appendChild(highlightSpan);
+                fragment.appendChild(document.createTextNode('('));
+
+                // 添加剩余文本
+                if (parts[i]) {
+                  fragment.appendChild(document.createTextNode(parts[i]));
+                }
+              }
+
+              // 替换原始节点
+              textNode.parentNode.replaceChild(fragment, textNode);
+            }
+          });
+        }
+      }
+    });
+
+    // 初始化工具提示
+    initTooltips();
+  });
+};
+
+// 跳转到函数定义
+const jumpToFunction = (funcName) => {
+  const funcDef = functionDefinitions.value[funcName];
+  if (funcDef && linePositions.value.length > 0) {
+    const targetLine = funcDef.lineNumber;
+    const codeContainer = document.querySelector('.code-container');
+
+    if (codeContainer && linePositions.value[targetLine]) {
+      // 计算目标行的位置并滚动到该位置
+      codeContainer.scrollTop = linePositions.value[targetLine].top - linePositions.value[0].top;
+
+      // 闪烁高亮目标行
+      highlightTargetLine(targetLine);
+    }
+  }
+};
+
+// 临时高亮目标行
+const highlightTargetLine = (lineIndex) => {
+  highlightedLine.value = lineIndex; // 设置高亮行
+  const targetLine = document.querySelectorAll('.code-line')[lineIndex];
+  if (targetLine) {
+    targetLine.classList.add('target-highlight');
+    setTimeout(() => {
+      targetLine.classList.remove('target-highlight');
+      highlightedLine.value = null; // 清除高亮行
+    }, 2000);
+  }
 };
 
 // 运行代码块
@@ -705,9 +989,89 @@ const toggleConsole = () => {
   }
 };
 
+// 在每次DOM更新后初始化工具提示
+const initTooltips = () => {
+  // 使用延迟执行，确保DOM已完全渲染
+  setTimeout(() => {
+    try {
+      // 查找所有带有函数调用标记的元素
+      const functionCalls = document.querySelectorAll('.function-call-highlight');
+
+      if (functionCalls.length > 0) {
+        console.log('找到函数调用元素:', functionCalls.length);
+
+        // 清除之前的工具提示实例
+        if (window._tippyInstances) {
+          window._tippyInstances.forEach(instance => {
+            try {
+              instance.destroy();
+            } catch (e) {
+              // 忽略销毁错误
+            }
+          });
+        }
+
+        // 为每个函数调用元素添加点击事件
+        functionCalls.forEach(el => {
+          // 添加点击事件
+          el.onclick = (event) => {
+            const funcName = el.getAttribute('data-function');
+            if (funcName && functionDefinitions.value[funcName]) {
+              console.log('点击函数调用:', funcName);
+              jumpToFunction(funcName);
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          };
+        });
+
+        // 初始化工具提示
+        window._tippyInstances = tippy('.function-call-highlight', {
+          allowHTML: true,
+          theme: 'light',
+          placement: 'top',
+          maxWidth: 800,
+          interactive: true,
+          delay: [200, 0],
+          content(reference) {
+            const content = reference.getAttribute('data-tippy-content');
+            return `<pre class="code-tooltip">${content || '函数定义'}</pre>`;
+          },
+          onShow(instance) {
+            // 添加Element Plus的样式类
+            instance.popper.classList.add('el-tooltip__popper');
+            instance.popper.classList.add('is-light');
+          }
+        });
+
+        console.log('成功初始化工具提示', window._tippyInstances.length);
+      } else {
+        console.log('未找到函数调用元素');
+        // 如果没找到元素，再尝试一次
+        setTimeout(initTooltips, 500);
+      }
+    } catch (error) {
+      console.error('初始化工具提示失败:', error);
+    }
+  }, 100);
+};
+
+// 函数点击事件已直接内联到元素的onclick属性中
+
 watch(() => props.filePath, (newPath) => {
   if (newPath) {
     fetchFileContent(newPath);
+  }
+});
+
+// 监视代码行变化，处理函数调用高亮
+watch(() => codeLines.length, (newLength) => {
+  if (newLength > 0) {
+    console.log('代码行数变化，处理函数调用高亮');
+    // 等待DOM更新完成
+    setTimeout(() => {
+      processCodeLineHighlighting();
+    }, 100);
   }
 });
 
@@ -716,6 +1080,18 @@ onMounted(() => {
   if (path) {
     fetchFileContent(path);
   }
+
+  // 添加全局函数供内联事件调用
+  window.jumpToFunctionDef = (funcName) => {
+    console.log('直接调用跳转函数:', funcName);
+    jumpToFunction(funcName);
+    return false; // 阻止默认行为
+  };
+
+  // 确保函数调用高亮处理
+  setTimeout(() => {
+    processCodeLineHighlighting();
+  }, 1000);
 });
 </script>
 
@@ -741,9 +1117,10 @@ onMounted(() => {
         <!-- 逐行渲染代码 -->
         <div v-for="line in codeLines" :key="line.index" class="code-line-wrapper">
           <!-- 代码行 -->
-          <div class="code-line">
+          <div class="code-line" :class="{ 'target-highlight': line.index === highlightedLine }">
             <span class="line-number">{{ line.index + 1 }}</span>
-            <span class="line-content" v-html="getHighlightedLine(line.text)"></span>
+            <!-- 使用计算属性处理高亮 -->
+            <span class="line-content" ref="codeLineContent" v-html="getHighlightedLine(line.text)"></span>
           </div>
 
           <!-- 如果是代码块结束行，添加运行框和输出区域 -->
@@ -892,6 +1269,37 @@ onMounted(() => {
 
 .line-content {
   flex: 1;
+}
+
+/* 函数调用高亮样式 - 使用Element Plus风格 */
+:deep(.function-call-highlight) {
+  color: #409eff !important;
+  cursor: pointer;
+  font-weight: bold;
+  background-color: rgba(64, 158, 255, 0.1);
+  padding: 0 4px;
+  border-radius: 2px;
+  transition: all 0.2s ease;
+  border-bottom: 1px dashed #409eff;
+  position: relative;
+  text-decoration: none;
+}
+
+:deep(.function-call-highlight:hover) {
+  color: #409eff !important;
+  background-color: rgba(64, 158, 255, 0.2);
+  border-bottom: 1px solid #409eff;
+}
+
+/* 目标行高亮样式 */
+.code-line.target-highlight {
+  background-color: rgba(80, 250, 123, 0.2);
+  animation: highlight-pulse 2s ease;
+}
+
+@keyframes highlight-pulse {
+  0%, 100% { background-color: rgba(80, 250, 123, 0); }
+  50% { background-color: rgba(80, 250, 123, 0.2); }
 }
 
 .run-frame {
@@ -1139,5 +1547,46 @@ onMounted(() => {
   -webkit-user-select: none !important;
   -moz-user-select: none !important;
   -ms-user-select: none !important;
+}
+
+/* 代码提示工具样式 - Element Plus风格 */
+:deep(.tippy-box[data-theme~='light']) {
+  background-color: #fff;
+  border: 1px solid #e4e7ed;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  color: #606266;
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 0;
+  max-width: 600px !important;
+}
+
+:deep(.tippy-box[data-theme~='light'] .tippy-content) {
+  padding: 0;
+}
+
+:deep(.code-tooltip) {
+  margin: 0;
+  padding: 12px 16px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow: auto;
+  background-color: #fafafa;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  color: #303133;
+}
+
+:deep(.tippy-box[data-theme~='light'][data-placement^='top'] > .tippy-arrow::before) {
+  border-top-color: #e4e7ed;
+}
+
+/* 添加Element Plus的样式类 */
+:deep(.el-tooltip__popper.is-light) {
+  background-color: #fff;
+  border: 1px solid #e4e7ed;
 }
 </style>
