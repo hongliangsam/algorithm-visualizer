@@ -31,8 +31,14 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: List build output
-        run: ls -la dist
+      - name: Debug - Show build directory structure
+        run: |
+          echo "===== Build Output Structure ====="
+          ls -la dist
+          echo "===== Index HTML Content ====="
+          cat dist/index.html
+          echo "===== Assets Directory ====="
+          ls -la dist/assets || echo "No assets directory found"
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
