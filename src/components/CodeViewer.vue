@@ -15,9 +15,9 @@ const highlightedLine = ref(null); // 添加高亮行引用
 
 // 导入所有章节文件
 // 使用 Vite 的动态导入功能
-const modules = import.meta.glob('../scripts/chapters/**/*.js', { as: 'raw', eager: true });
+const modules = import.meta.glob('../scripts/chapters/**/*.js', { query: '?raw', import: 'default', eager: true });
 // 导入所有模块文件作为原始内容
-const moduleFiles = import.meta.glob('../scripts/chapters/modules/*.js', { as: 'raw', eager: true });
+const moduleFiles = import.meta.glob('../scripts/chapters/modules/*.js', { query: '?raw', import: 'default', eager: true });
 
 const props = defineProps({
   filePath: String
