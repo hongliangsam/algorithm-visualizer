@@ -927,148 +927,148 @@ for (let i = 0; i < 10; i++) {\r
     console.log('\\n数组 [ 1, 2, ..., n ] 被打乱后 = [' + nums.join(', ') + ']');\r
     console.log('数字 1 的索引为 ' + index);\r
 }\r
-`,lse=`/**
- * File: graph_adjacency_list.js
- * Created Time: 2023-02-09
- * Author: Justin (xiefahit@gmail.com)
- */
-
-import { Vertex } from '../modules/Vertex.js';
-
-/* 基于邻接表实现的无向图类 */
-class GraphAdjList {
-    // 邻接表，key: 顶点，value：该顶点的所有邻接顶点
-    adjList;
-
-    /* 构造方法 */
-    constructor(edges) {
-        this.adjList = new Map();
-        // 添加所有顶点和边
-        for (const edge of edges) {
-            this.addVertex(edge[0]);
-            this.addVertex(edge[1]);
-            this.addEdge(edge[0], edge[1]);
-        }
-    }
-
-    /* 获取顶点数量 */
-    size() {
-        return this.adjList.size;
-    }
-
-    /* 添加边 */
-    addEdge(vet1, vet2) {
-        if (
-            !this.adjList.has(vet1) ||
-            !this.adjList.has(vet2) ||
-            vet1 === vet2
-        ) {
-            throw new Error('Illegal Argument Exception');
-        }
-        // 添加边 vet1 - vet2
-        this.adjList.get(vet1).push(vet2);
-        this.adjList.get(vet2).push(vet1);
-    }
-
-    /* 删除边 */
-    removeEdge(vet1, vet2) {
-        if (
-            !this.adjList.has(vet1) ||
-            !this.adjList.has(vet2) ||
-            vet1 === vet2
-        ) {
-            throw new Error('Illegal Argument Exception');
-        }
-        // 删除边 vet1 - vet2
-        this.adjList.get(vet1).splice(this.adjList.get(vet1).indexOf(vet2), 1);
-        this.adjList.get(vet2).splice(this.adjList.get(vet2).indexOf(vet1), 1);
-    }
-
-    /* 添加顶点 */
-    addVertex(vet) {
-        if (this.adjList.has(vet)) return;
-        // 在邻接表中添加一个新链表
-        this.adjList.set(vet, []);
-    }
-
-    /* 删除顶点 */
-    removeVertex(vet) {
-        if (!this.adjList.has(vet)) {
-            throw new Error('Illegal Argument Exception');
-        }
-        // 在邻接表中删除顶点 vet 对应的链表
-        this.adjList.delete(vet);
-        // 遍历其他顶点的链表，删除所有包含 vet 的边
-        for (let set of this.adjList.values()) {
-            const index = set.indexOf(vet);
-            if (index > -1) {
-                set.splice(index, 1);
-            }
-        }
-    }
-
-    /* 打印邻接表 */
-    print() {
-        console.log('邻接表 =');
-        for (const [key, value] of this.adjList) {
-            const tmp = [];
-            for (const vertex of value) {
-                tmp.push(vertex.val);
-            }
-            console.log(key.val + ': ' + tmp.join());
-        }
-    }
-}
-
-// 示例代码（可在控制台中执行）
-function runExample() {
-    /* 初始化无向图 */
-    const v0 = new Vertex(1),
-        v1 = new Vertex(3),
-        v2 = new Vertex(2),
-        v3 = new Vertex(5),
-        v4 = new Vertex(4);
-    const edges = [
-        [v0, v1],
-        [v1, v2],
-        [v2, v3],
-        [v0, v3],
-        [v2, v4],
-        [v3, v4],
-    ];
-    const graph = new GraphAdjList(edges);
-    console.log('\\n初始化后，图为');
-    graph.print();
-
-    /* 添加边 */
-    // 顶点 1, 2 即 v0, v2
-    graph.addEdge(v0, v2);
-    console.log('\\n添加边 1-2 后，图为');
-    graph.print();
-
-    /* 删除边 */
-    // 顶点 1, 3 即 v0, v1
-    graph.removeEdge(v0, v1);
-    console.log('\\n删除边 1-3 后，图为');
-    graph.print();
-
-    /* 添加顶点 */
-    const v5 = new Vertex(6);
-    graph.addVertex(v5);
-    console.log('\\n添加顶点 6 后，图为');
-    graph.print();
-
-    /* 删除顶点 */
-    // 顶点 3 即 v1
-    graph.removeVertex(v1);
-    console.log('\\n删除顶点 3 后，图为');
-    graph.print();
-}
-
-export {
-    GraphAdjList,
-    runExample
-};
+`,lse=`/**\r
+ * File: graph_adjacency_list.js\r
+ * Created Time: 2023-02-09\r
+ * Author: Justin (xiefahit@gmail.com)\r
+ */\r
+\r
+import { Vertex } from '../modules/Vertex.js';\r
+\r
+/* 基于邻接表实现的无向图类 */\r
+class GraphAdjList {\r
+    // 邻接表，key: 顶点，value：该顶点的所有邻接顶点\r
+    adjList;\r
+\r
+    /* 构造方法 */\r
+    constructor(edges) {\r
+        this.adjList = new Map();\r
+        // 添加所有顶点和边\r
+        for (const edge of edges) {\r
+            this.addVertex(edge[0]);\r
+            this.addVertex(edge[1]);\r
+            this.addEdge(edge[0], edge[1]);\r
+        }\r
+    }\r
+\r
+    /* 获取顶点数量 */\r
+    size() {\r
+        return this.adjList.size;\r
+    }\r
+\r
+    /* 添加边 */\r
+    addEdge(vet1, vet2) {\r
+        if (\r
+            !this.adjList.has(vet1) ||\r
+            !this.adjList.has(vet2) ||\r
+            vet1 === vet2\r
+        ) {\r
+            throw new Error('Illegal Argument Exception');\r
+        }\r
+        // 添加边 vet1 - vet2\r
+        this.adjList.get(vet1).push(vet2);\r
+        this.adjList.get(vet2).push(vet1);\r
+    }\r
+\r
+    /* 删除边 */\r
+    removeEdge(vet1, vet2) {\r
+        if (\r
+            !this.adjList.has(vet1) ||\r
+            !this.adjList.has(vet2) ||\r
+            vet1 === vet2\r
+        ) {\r
+            throw new Error('Illegal Argument Exception');\r
+        }\r
+        // 删除边 vet1 - vet2\r
+        this.adjList.get(vet1).splice(this.adjList.get(vet1).indexOf(vet2), 1);\r
+        this.adjList.get(vet2).splice(this.adjList.get(vet2).indexOf(vet1), 1);\r
+    }\r
+\r
+    /* 添加顶点 */\r
+    addVertex(vet) {\r
+        if (this.adjList.has(vet)) return;\r
+        // 在邻接表中添加一个新链表\r
+        this.adjList.set(vet, []);\r
+    }\r
+\r
+    /* 删除顶点 */\r
+    removeVertex(vet) {\r
+        if (!this.adjList.has(vet)) {\r
+            throw new Error('Illegal Argument Exception');\r
+        }\r
+        // 在邻接表中删除顶点 vet 对应的链表\r
+        this.adjList.delete(vet);\r
+        // 遍历其他顶点的链表，删除所有包含 vet 的边\r
+        for (let set of this.adjList.values()) {\r
+            const index = set.indexOf(vet);\r
+            if (index > -1) {\r
+                set.splice(index, 1);\r
+            }\r
+        }\r
+    }\r
+\r
+    /* 打印邻接表 */\r
+    print() {\r
+        console.log('邻接表 =');\r
+        for (const [key, value] of this.adjList) {\r
+            const tmp = [];\r
+            for (const vertex of value) {\r
+                tmp.push(vertex.val);\r
+            }\r
+            console.log(key.val + ': ' + tmp.join());\r
+        }\r
+    }\r
+}\r
+\r
+// 示例代码（可在控制台中执行）\r
+function runExample() {\r
+    /* 初始化无向图 */\r
+    const v0 = new Vertex(1),\r
+        v1 = new Vertex(3),\r
+        v2 = new Vertex(2),\r
+        v3 = new Vertex(5),\r
+        v4 = new Vertex(4);\r
+    const edges = [\r
+        [v0, v1],\r
+        [v1, v2],\r
+        [v2, v3],\r
+        [v0, v3],\r
+        [v2, v4],\r
+        [v3, v4],\r
+    ];\r
+    const graph = new GraphAdjList(edges);\r
+    console.log('\\n初始化后，图为');\r
+    graph.print();\r
+\r
+    /* 添加边 */\r
+    // 顶点 1, 2 即 v0, v2\r
+    graph.addEdge(v0, v2);\r
+    console.log('\\n添加边 1-2 后，图为');\r
+    graph.print();\r
+\r
+    /* 删除边 */\r
+    // 顶点 1, 3 即 v0, v1\r
+    graph.removeEdge(v0, v1);\r
+    console.log('\\n删除边 1-3 后，图为');\r
+    graph.print();\r
+\r
+    /* 添加顶点 */\r
+    const v5 = new Vertex(6);\r
+    graph.addVertex(v5);\r
+    console.log('\\n添加顶点 6 后，图为');\r
+    graph.print();\r
+\r
+    /* 删除顶点 */\r
+    // 顶点 3 即 v1\r
+    graph.removeVertex(v1);\r
+    console.log('\\n删除顶点 3 后，图为');\r
+    graph.print();\r
+}\r
+\r
+export {\r
+    GraphAdjList,\r
+    runExample\r
+};\r
 `,sse=`/**\r
  * File: graph_adjacency_matrix.js\r
  * Created Time: 2023-02-09\r
@@ -1201,136 +1201,136 @@ graph.print();\r
 graph.removeVertex(1);\r
 console.log('\\n删除顶点 3 后，图为');\r
 graph.print();\r
-`,ise=`/**
- * File: graph_bfs.js
- * Created Time: 2023-02-21
- * Author: Zhuo Qinyue (1403450829@qq.com)
- */
-
-import { GraphAdjList } from './graph_adjacency_list.js';
-import { Vertex } from '../modules/Vertex.js';
-
-/* 广度优先遍历 BFS */
-// 使用邻接表来表示图，以便获取指定顶点的所有邻接顶点
-function graphBFS(graph, startVet) {
-    // 顶点遍历序列
-    const res = [];
-    // 哈希表，用于记录已被访问过的顶点
-    const visited = new Set();
-    visited.add(startVet);
-    // 队列用于实现 BFS
-    const que = [startVet];
-    // 以顶点 vet 为起点，循环直至访问完所有顶点
-    while (que.length) {
-        const vet = que.shift(); // 队首顶点出队
-        res.push(vet); // 记录访问顶点
-        // 遍历该顶点的所有邻接顶点
-        for (const adjVet of graph.adjList.get(vet) ?? []) {
-            if (visited.has(adjVet)) {
-                continue; // 跳过已被访问过的顶点
-            }
-            que.push(adjVet); // 只入队未访问的顶点
-            visited.add(adjVet); // 标记该顶点已被访问
-        }
-    }
-    // 返回顶点遍历序列
-    return res;
-}
-
-// 示例代码（可在控制台中执行）
-function runExample() {
-    /* 初始化无向图 */
-    const v = Vertex.valsToVets([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-    const edges = [
-        [v[0], v[1]],
-        [v[0], v[3]],
-        [v[1], v[2]],
-        [v[1], v[4]],
-        [v[2], v[5]],
-        [v[3], v[4]],
-        [v[3], v[6]],
-        [v[4], v[5]],
-        [v[4], v[7]],
-        [v[5], v[8]],
-        [v[6], v[7]],
-        [v[7], v[8]],
-    ];
-    const graph = new GraphAdjList(edges);
-    console.log('\\n初始化后，图为');
-    graph.print();
-
-    /* 广度优先遍历 BFS */
-    const res = graphBFS(graph, v[0]);
-    console.log('\\n广度优先遍历（BFS）顶点序列为');
-    console.log(Vertex.vetsToVals(res));
-}
-
-export {
-    graphBFS,
-    runExample
-};
-`,use=`/**
- * File: graph_dfs.js
- * Created Time: 2023-02-21
- * Author: Zhuo Qinyue (1403450829@qq.com)
- */
-
-import { Vertex } from '../modules/Vertex.js';
-import { GraphAdjList } from './graph_adjacency_list.js';
-
-/* 深度优先遍历 DFS */
-// 使用邻接表来表示图，以便获取指定顶点的所有邻接顶点
-function dfs(graph, visited, res, vet) {
-    res.push(vet); // 记录访问顶点
-    visited.add(vet); // 标记该顶点已被访问
-    // 遍历该顶点的所有邻接顶点
-    for (const adjVet of graph.adjList.get(vet)) {
-        if (visited.has(adjVet)) {
-            continue; // 跳过已被访问过的顶点
-        }
-        // 递归访问邻接顶点
-        dfs(graph, visited, res, adjVet);
-    }
-}
-
-/* 深度优先遍历 DFS */
-// 使用邻接表来表示图，以便获取指定顶点的所有邻接顶点
-function graphDFS(graph, startVet) {
-    // 顶点遍历序列
-    const res = [];
-    // 哈希表，用于记录已被访问过的顶点
-    const visited = new Set();
-    dfs(graph, visited, res, startVet);
-    return res;
-}
-
-// 示例代码（可在控制台中执行）
-function runExample() {
-    /* 初始化无向图 */
-    const v = Vertex.valsToVets([0, 1, 2, 3, 4, 5, 6]);
-    const edges = [
-        [v[0], v[1]],
-        [v[0], v[3]],
-        [v[1], v[2]],
-        [v[2], v[5]],
-        [v[4], v[5]],
-        [v[5], v[6]],
-    ];
-    const graph = new GraphAdjList(edges);
-    console.log('\\n初始化后，图为');
-    graph.print();
-
-    /* 深度优先遍历 DFS */
-    const res = graphDFS(graph, v[0]);
-    console.log('\\n深度优先遍历（DFS）顶点序列为');
-    console.log(Vertex.vetsToVals(res));
-}
-
-export {
-    graphDFS,
-    dfs,
-    runExample
-};
+`,ise=`/**\r
+ * File: graph_bfs.js\r
+ * Created Time: 2023-02-21\r
+ * Author: Zhuo Qinyue (1403450829@qq.com)\r
+ */\r
+\r
+import { GraphAdjList } from './graph_adjacency_list.js';\r
+import { Vertex } from '../modules/Vertex.js';\r
+\r
+/* 广度优先遍历 BFS */\r
+// 使用邻接表来表示图，以便获取指定顶点的所有邻接顶点\r
+function graphBFS(graph, startVet) {\r
+    // 顶点遍历序列\r
+    const res = [];\r
+    // 哈希表，用于记录已被访问过的顶点\r
+    const visited = new Set();\r
+    visited.add(startVet);\r
+    // 队列用于实现 BFS\r
+    const que = [startVet];\r
+    // 以顶点 vet 为起点，循环直至访问完所有顶点\r
+    while (que.length) {\r
+        const vet = que.shift(); // 队首顶点出队\r
+        res.push(vet); // 记录访问顶点\r
+        // 遍历该顶点的所有邻接顶点\r
+        for (const adjVet of graph.adjList.get(vet) ?? []) {\r
+            if (visited.has(adjVet)) {\r
+                continue; // 跳过已被访问过的顶点\r
+            }\r
+            que.push(adjVet); // 只入队未访问的顶点\r
+            visited.add(adjVet); // 标记该顶点已被访问\r
+        }\r
+    }\r
+    // 返回顶点遍历序列\r
+    return res;\r
+}\r
+\r
+// 示例代码（可在控制台中执行）\r
+function runExample() {\r
+    /* 初始化无向图 */\r
+    const v = Vertex.valsToVets([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);\r
+    const edges = [\r
+        [v[0], v[1]],\r
+        [v[0], v[3]],\r
+        [v[1], v[2]],\r
+        [v[1], v[4]],\r
+        [v[2], v[5]],\r
+        [v[3], v[4]],\r
+        [v[3], v[6]],\r
+        [v[4], v[5]],\r
+        [v[4], v[7]],\r
+        [v[5], v[8]],\r
+        [v[6], v[7]],\r
+        [v[7], v[8]],\r
+    ];\r
+    const graph = new GraphAdjList(edges);\r
+    console.log('\\n初始化后，图为');\r
+    graph.print();\r
+\r
+    /* 广度优先遍历 BFS */\r
+    const res = graphBFS(graph, v[0]);\r
+    console.log('\\n广度优先遍历（BFS）顶点序列为');\r
+    console.log(Vertex.vetsToVals(res));\r
+}\r
+\r
+export {\r
+    graphBFS,\r
+    runExample\r
+};\r
+`,use=`/**\r
+ * File: graph_dfs.js\r
+ * Created Time: 2023-02-21\r
+ * Author: Zhuo Qinyue (1403450829@qq.com)\r
+ */\r
+\r
+import { Vertex } from '../modules/Vertex.js';\r
+import { GraphAdjList } from './graph_adjacency_list.js';\r
+\r
+/* 深度优先遍历 DFS */\r
+// 使用邻接表来表示图，以便获取指定顶点的所有邻接顶点\r
+function dfs(graph, visited, res, vet) {\r
+    res.push(vet); // 记录访问顶点\r
+    visited.add(vet); // 标记该顶点已被访问\r
+    // 遍历该顶点的所有邻接顶点\r
+    for (const adjVet of graph.adjList.get(vet)) {\r
+        if (visited.has(adjVet)) {\r
+            continue; // 跳过已被访问过的顶点\r
+        }\r
+        // 递归访问邻接顶点\r
+        dfs(graph, visited, res, adjVet);\r
+    }\r
+}\r
+\r
+/* 深度优先遍历 DFS */\r
+// 使用邻接表来表示图，以便获取指定顶点的所有邻接顶点\r
+function graphDFS(graph, startVet) {\r
+    // 顶点遍历序列\r
+    const res = [];\r
+    // 哈希表，用于记录已被访问过的顶点\r
+    const visited = new Set();\r
+    dfs(graph, visited, res, startVet);\r
+    return res;\r
+}\r
+\r
+// 示例代码（可在控制台中执行）\r
+function runExample() {\r
+    /* 初始化无向图 */\r
+    const v = Vertex.valsToVets([0, 1, 2, 3, 4, 5, 6]);\r
+    const edges = [\r
+        [v[0], v[1]],\r
+        [v[0], v[3]],\r
+        [v[1], v[2]],\r
+        [v[2], v[5]],\r
+        [v[4], v[5]],\r
+        [v[5], v[6]],\r
+    ];\r
+    const graph = new GraphAdjList(edges);\r
+    console.log('\\n初始化后，图为');\r
+    graph.print();\r
+\r
+    /* 深度优先遍历 DFS */\r
+    const res = graphDFS(graph, v[0]);\r
+    console.log('\\n深度优先遍历（DFS）顶点序列为');\r
+    console.log(Vertex.vetsToVals(res));\r
+}\r
+\r
+export {\r
+    graphDFS,\r
+    dfs,\r
+    runExample\r
+};\r
 `,cse=`/**\r
  * File: array_hash_map.js\r
  * Created Time: 2022-12-26\r
@@ -4392,41 +4392,41 @@ export {\r
     TreeNode,\r
     arrToTree,\r
 };\r
-`,Bse=`/**
- * File: Vertex.js
- * Created Time: 2023-02-15
- * Author: Zhuo Qinyue (1403450829@qq.com)
- */
-
-/* 顶点类 */
-class Vertex {
-    val;
-    constructor(val) {
-        this.val = val;
-    }
-
-    /* 输入值列表 vals ，返回顶点列表 vets */
-    static valsToVets(vals) {
-        const vets = [];
-        for (let i = 0; i < vals.length; i++) {
-            vets[i] = new Vertex(vals[i]);
-        }
-        return vets;
-    }
-
-    /* 输入顶点列表 vets ，返回值列表 vals */
-    static vetsToVals(vets) {
-        const vals = [];
-        for (const vet of vets) {
-            vals.push(vet.val);
-        }
-        return vals;
-    }
-}
-
-export {
-    Vertex,
-};
+`,Bse=`/**\r
+ * File: Vertex.js\r
+ * Created Time: 2023-02-15\r
+ * Author: Zhuo Qinyue (1403450829@qq.com)\r
+ */\r
+\r
+/* 顶点类 */\r
+class Vertex {\r
+    val;\r
+    constructor(val) {\r
+        this.val = val;\r
+    }\r
+\r
+    /* 输入值列表 vals ，返回顶点列表 vets */\r
+    static valsToVets(vals) {\r
+        const vets = [];\r
+        for (let i = 0; i < vals.length; i++) {\r
+            vets[i] = new Vertex(vals[i]);\r
+        }\r
+        return vets;\r
+    }\r
+\r
+    /* 输入顶点列表 vets ，返回值列表 vals */\r
+    static vetsToVals(vets) {\r
+        const vals = [];\r
+        for (const vet of vets) {\r
+            vals.push(vet.val);\r
+        }\r
+        return vals;\r
+    }\r
+}\r
+\r
+export {\r
+    Vertex,\r
+};\r
 `;var Cf={exports:{}},ig;function Hse(){return ig||(ig=1,function(e){var t=typeof window<"u"?window:typeof WorkerGlobalScope<"u"&&self instanceof WorkerGlobalScope?self:{};/**
  * Prism: Lightweight, robust, elegant syntax highlighting
  *
@@ -4835,4 +4835,4 @@ export {
           `).join("")}
         </div>
       </div>
-    `}},te=async W=>new Promise((D,Q)=>{try{if(t.value[W]){const Z=t.value[W];D(Z.definitionText||`函数 ${W} 的定义未找到`)}else D(`// 函数 ${W} 的定义未在当前文件中找到`)}catch(Z){console.error("获取函数定义失败:",Z),Q(Z)}}),U=W=>W?W.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"):"";return he(()=>a.filePath,W=>{W&&g(W)}),he(()=>y.length,W=>{W>0&&(console.log("代码行数变化，处理函数调用高亮"),setTimeout(()=>{$()},100))}),nt(()=>{const W=l.params.filePath;W&&g(W),window.jumpToFunctionDef=D=>(console.log("直接调用跳转函数:",D),A(D),!1),setTimeout(()=>{$()},1e3)}),(W,D)=>{const Q=it("el-button"),Z=Oi("loading");return w(),M("div",jse,[E("div",Kse,[u.value?(w(),M("h2",qse,xe(u.value),1)):ie("",!0),E("div",Wse,[G(Q,{type:"primary",icon:s(f3),loading:f.value,onClick:V},{default:ne(()=>D[1]||(D[1]=[at(" 运行全部代码 ")])),_:1,__:[1]},8,["icon","loading"]),G(Q,{icon:s(X6),onClick:I},{default:ne(()=>D[2]||(D[2]=[at(" 下载 ")])),_:1,__:[2]},8,["icon"]),G(Q,{icon:s(i3),onClick:q},{default:ne(()=>D[3]||(D[3]=[at(" 分享 ")])),_:1,__:[3]},8,["icon"])])]),Qe((w(),M("div",Use,[y.length>0?(w(),M("div",Yse,[D[5]||(D[5]=E("link",{rel:"preconnect",href:"https://fonts.googleapis.com"},null,-1)),D[6]||(D[6]=E("link",{rel:"preconnect",href:"https://fonts.gstatic.com",crossorigin:""},null,-1)),D[7]||(D[7]=E("link",{href:"https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=SF+Mono:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&display=swap",rel:"stylesheet"},null,-1)),(w(!0),M(Ve,null,pt(y,ae=>{var j,ee,J,pe,de;return w(),M("div",{key:ae.index,class:"code-line-wrapper"},[E("div",{class:L(["code-line",{"target-highlight":ae.index===r.value}])},[E("span",Gse,xe(ae.index+1),1),E("span",{class:"line-content",ref_for:!0,ref:"codeLineContent",innerHTML:S(ae.text)},null,8,Xse)],2),ae.isCodeBlockEnd?(w(),M("div",Zse,[G(Q,{class:"run-line-btn",type:"success",size:"small",loading:(j=C[ae.index])==null?void 0:j.loading,onClick:H=>O(ae.index)},{default:ne(()=>D[4]||(D[4]=[at(" 运行此代码块 ")])),_:2,__:[4]},1032,["loading","onClick"]),E("div",{class:L(["line-output",(ee=C[ae.index])==null?void 0:ee.status])},[(J=C[ae.index])!=null&&J.loading?(w(),M("div",Jse," 执行中... ")):((pe=C[ae.index])==null?void 0:pe.logs.length)===0?(w(),M("div",Qse," 运行后查看输出 ")):(w(!0),M(Ve,{key:2},pt((de=C[ae.index])==null?void 0:de.logs,(H,Y)=>(w(),M("div",{key:`${ae.index}-${Y}`,class:L(["log-line",H.type])},[H.type==="error"?(w(),M("span",eie,"⚠")):ie("",!0),H.type==="warn"?(w(),M("span",tie,"⚠")):ie("",!0),H.type==="info"?(w(),M("span",nie,"ℹ")):ie("",!0),at(" "+xe(H.content),1)],2))),128))],2)])):ie("",!0)])}),128))])):(w(),M("div",rie," 请从左侧选择一个文件查看 "))])),[[Z,d.value]]),E("div",{class:"resize-handle",onMousedown:X},null,32),E("div",{class:L(["console-container",v.value]),style:Be({height:`${p.value}px`})},[E("div",oie,[E("div",aie,[D[8]||(D[8]=E("h3",null,"全局控制台输出",-1)),G(Q,{class:"toggle-console-btn",size:"small",icon:p.value<50?s(Np):s(U6),onClick:K},{default:ne(()=>[at(xe(p.value<50?"展开":"折叠"),1)]),_:1},8,["icon"])]),G(Q,{size:"small",onClick:D[0]||(D[0]=ae=>c.value=[])},{default:ne(()=>D[9]||(D[9]=[at("清空")])),_:1,__:[9]})]),E("div",lie,[c.value.length===0?(w(),M("div",sie,D[10]||(D[10]=[E("p",null,"运行代码后查看输出结果",-1)]))):ie("",!0),(w(!0),M(Ve,null,pt(c.value,(ae,j)=>(w(),M("div",{key:j,class:L(["console-line",ae.type])},[ae.type==="error"?(w(),M("span",iie,"⚠")):ie("",!0),ae.type==="warn"?(w(),M("span",uie,"⚠")):ie("",!0),ae.type==="info"?(w(),M("span",cie,"ℹ")):ie("",!0),at(" "+xe(ae.content),1)],2))),128))])],6)])}}},fie=dh(die,[["__scopeId","data-v-bd76c9e1"]]),pie={class:"home-page"},vie={class:"page-header"},hie={class:"header-right"},mie={class:"main-content"},gie={class:"sidebar"},yie={class:"content"},_ie={__name:"HomePage",setup(e){gb();const t=z(""),n=z(""),r=o=>{t.value=o.path,n.value=o.path};return(o,a)=>{const l=it("el-button");return w(),M("div",pie,[E("div",vie,[a[1]||(a[1]=E("div",{class:"logo"},[E("span",{class:"logo-text"},"算法可视化"),E("div",{class:"logo-sub"},"Algorithm Visualizer")],-1)),E("div",hie,[G(l,{type:"primary",round:""},{default:ne(()=>a[0]||(a[0]=[at("开始学习")])),_:1,__:[0]})])]),E("div",mie,[E("div",gie,[G(Zle,{"active-file":t.value,onSelectFile:r},null,8,["active-file"])]),E("div",yie,[G(fie,{"file-path":n.value},null,8,["file-path"])])])])}}},ug=dh(_ie,[["__scopeId","data-v-952bf193"]]),bie=[{path:"/",name:"home",component:ug},{path:"/code/:filePath(.*)",name:"code",component:ug}],wie="/algorithm-visualizer/",Cie=Fle({history:vle(wie),routes:bie}),Qi=R4(Vae);for(const[e,t]of Object.entries(wR))Qi.component(e,t);Qi.use(K5());Qi.use(Rae);Qi.use(Cie);Qi.mount("#app")});export default kie();
+    `}},te=async W=>new Promise((D,Q)=>{try{if(t.value[W]){const Z=t.value[W];D(Z.definitionText||`函数 ${W} 的定义未找到`)}else D(`// 函数 ${W} 的定义未在当前文件中找到`)}catch(Z){console.error("获取函数定义失败:",Z),Q(Z)}}),U=W=>W?W.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;"):"";return he(()=>a.filePath,W=>{W&&g(W)}),he(()=>y.length,W=>{W>0&&(console.log("代码行数变化，处理函数调用高亮"),setTimeout(()=>{$()},100))}),nt(()=>{const W=l.params.filePath;W&&g(W),window.jumpToFunctionDef=D=>(console.log("直接调用跳转函数:",D),A(D),!1),setTimeout(()=>{$()},1e3)}),(W,D)=>{const Q=it("el-button"),Z=Oi("loading");return w(),M("div",jse,[E("div",Kse,[u.value?(w(),M("h2",qse,xe(u.value),1)):ie("",!0),E("div",Wse,[G(Q,{type:"primary",icon:s(f3),loading:f.value,onClick:V},{default:ne(()=>D[1]||(D[1]=[at(" 运行全部代码 ")])),_:1,__:[1]},8,["icon","loading"]),G(Q,{icon:s(X6),onClick:I},{default:ne(()=>D[2]||(D[2]=[at(" 下载 ")])),_:1,__:[2]},8,["icon"]),G(Q,{icon:s(i3),onClick:q},{default:ne(()=>D[3]||(D[3]=[at(" 分享 ")])),_:1,__:[3]},8,["icon"])])]),Qe((w(),M("div",Use,[y.length>0?(w(),M("div",Yse,[D[5]||(D[5]=E("link",{rel:"preconnect",href:"https://fonts.googleapis.com"},null,-1)),D[6]||(D[6]=E("link",{rel:"preconnect",href:"https://fonts.gstatic.com",crossorigin:""},null,-1)),D[7]||(D[7]=E("link",{href:"https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=SF+Mono:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&display=swap",rel:"stylesheet"},null,-1)),(w(!0),M(Ve,null,pt(y,ae=>{var j,ee,J,pe,de;return w(),M("div",{key:ae.index,class:"code-line-wrapper"},[E("div",{class:L(["code-line",{"target-highlight":ae.index===r.value}])},[E("span",Gse,xe(ae.index+1),1),E("span",{class:"line-content",ref_for:!0,ref:"codeLineContent",innerHTML:S(ae.text)},null,8,Xse)],2),ae.isCodeBlockEnd?(w(),M("div",Zse,[G(Q,{class:"run-line-btn",type:"success",size:"small",loading:(j=C[ae.index])==null?void 0:j.loading,onClick:H=>O(ae.index)},{default:ne(()=>D[4]||(D[4]=[at(" 运行此代码块 ")])),_:2,__:[4]},1032,["loading","onClick"]),E("div",{class:L(["line-output",(ee=C[ae.index])==null?void 0:ee.status])},[(J=C[ae.index])!=null&&J.loading?(w(),M("div",Jse," 执行中... ")):((pe=C[ae.index])==null?void 0:pe.logs.length)===0?(w(),M("div",Qse," 运行后查看输出 ")):(w(!0),M(Ve,{key:2},pt((de=C[ae.index])==null?void 0:de.logs,(H,Y)=>(w(),M("div",{key:`${ae.index}-${Y}`,class:L(["log-line",H.type])},[H.type==="error"?(w(),M("span",eie,"⚠")):ie("",!0),H.type==="warn"?(w(),M("span",tie,"⚠")):ie("",!0),H.type==="info"?(w(),M("span",nie,"ℹ")):ie("",!0),at(" "+xe(H.content),1)],2))),128))],2)])):ie("",!0)])}),128))])):(w(),M("div",rie," 请从左侧选择一个文件查看 "))])),[[Z,d.value]]),E("div",{class:"resize-handle",onMousedown:X},null,32),E("div",{class:L(["console-container",v.value]),style:Be({height:`${p.value}px`})},[E("div",oie,[E("div",aie,[D[8]||(D[8]=E("h3",null,"全局控制台输出",-1)),G(Q,{class:"toggle-console-btn",size:"small",icon:p.value<50?s(Np):s(U6),onClick:K},{default:ne(()=>[at(xe(p.value<50?"展开":"折叠"),1)]),_:1},8,["icon"])]),G(Q,{size:"small",onClick:D[0]||(D[0]=ae=>c.value=[])},{default:ne(()=>D[9]||(D[9]=[at("清空")])),_:1,__:[9]})]),E("div",lie,[c.value.length===0?(w(),M("div",sie,D[10]||(D[10]=[E("p",null,"运行代码后查看输出结果",-1)]))):ie("",!0),(w(!0),M(Ve,null,pt(c.value,(ae,j)=>(w(),M("div",{key:j,class:L(["console-line",ae.type])},[ae.type==="error"?(w(),M("span",iie,"⚠")):ie("",!0),ae.type==="warn"?(w(),M("span",uie,"⚠")):ie("",!0),ae.type==="info"?(w(),M("span",cie,"ℹ")):ie("",!0),at(" "+xe(ae.content),1)],2))),128))])],6)])}}},fie=dh(die,[["__scopeId","data-v-cd65f2f5"]]),pie={class:"home-page"},vie={class:"page-header"},hie={class:"header-right"},mie={class:"main-content"},gie={class:"sidebar"},yie={class:"content"},_ie={__name:"HomePage",setup(e){gb();const t=z(""),n=z(""),r=o=>{t.value=o.path,n.value=o.path};return(o,a)=>{const l=it("el-button");return w(),M("div",pie,[E("div",vie,[a[1]||(a[1]=E("div",{class:"logo"},[E("span",{class:"logo-text"},"算法可视化"),E("div",{class:"logo-sub"},"Algorithm Visualizer")],-1)),E("div",hie,[G(l,{type:"primary",round:""},{default:ne(()=>a[0]||(a[0]=[at("开始学习")])),_:1,__:[0]})])]),E("div",mie,[E("div",gie,[G(Zle,{"active-file":t.value,onSelectFile:r},null,8,["active-file"])]),E("div",yie,[G(fie,{"file-path":n.value},null,8,["file-path"])])])])}}},ug=dh(_ie,[["__scopeId","data-v-952bf193"]]),bie=[{path:"/",name:"home",component:ug},{path:"/code/:filePath(.*)",name:"code",component:ug}],wie="/algorithm-visualizer/",Cie=Fle({history:vle(wie),routes:bie}),Qi=R4(Vae);for(const[e,t]of Object.entries(wR))Qi.component(e,t);Qi.use(K5());Qi.use(Rae);Qi.use(Cie);Qi.mount("#app")});export default kie();
