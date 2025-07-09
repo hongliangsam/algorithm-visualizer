@@ -7,8 +7,8 @@
     "dev": "vite",
     "build": "vite build && node scripts/copy-files.js",
     "preview": "vite preview",
-    "deploy": "gh-pages -d dist",
-    "deploy:force": "gh-pages -d dist -f"
+    "deploy": "gh-pages -d dist --add",
+    "deploy:force": "gh-pages -d dist -f --add"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
