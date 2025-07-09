@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "vite build && node scripts/copy-files.js",
+    "preview": "vite preview",
+    "deploy": "gh-pages -d dist",
+    "deploy:force": "gh-pages -d dist -f"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
