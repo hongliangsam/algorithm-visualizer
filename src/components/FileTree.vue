@@ -184,7 +184,7 @@ onMounted(() => {
         <li v-for="folder in fileTree" :key="folder.path" class="tree-folder">
           <div class="folder-header" @click="toggleFolder(folder.path)">
             <el-icon class="folder-icon"><Folder /></el-icon>
-            <span class="folder-name">{{ formatFolderName(folder.name) }}</span>
+            <span class="folder-name" :title="formatFolderName(folder.name)">{{ formatFolderName(folder.name) }}</span>
             <el-icon class="arrow-icon" :class="{ expanded: expandedFolders.has(folder.path) }">
               <CaretRight />
             </el-icon>
@@ -262,6 +262,9 @@ onMounted(() => {
 .folder-name {
   flex: 1;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .arrow-icon {
