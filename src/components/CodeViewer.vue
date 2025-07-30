@@ -31,9 +31,12 @@ const isLoading = ref(false);
 const isExecuting = ref(false);
 const outputClass = ref('');
 const consoleHeight = ref(200);
-const isDragging = ref(false);
-const startY = ref(0);
-const startHeight = ref(0);
+// 提升这些变量到组件级别，不在事件处理函数中创建局部变量
+const consoleEl = ref(null);
+// 控制台拖拽相关变量
+let consoleH;
+let cStartY;
+let minConsoleHeight = 50;
 
 // 解析后的代码行，包含是否是console语句的标记
 const codeLines = reactive([]);
@@ -1030,46 +1033,38 @@ const shareCode = async () => {
   }
 };
 
-// 控制台大小调整相关方法
+// 控制台大小调整方法 - 使用类似Svelte的风格实现
 const startDrag = (e) => {
-  e.preventDefault(); // 防止选中文本
-  isDragging.value = true;
-  startY.value = e.clientY;
-  startHeight.value = consoleHeight.value;
+  // 阻止默认行为
+  e.preventDefault();
 
-  // 添加事件监听器到document对象
-  document.addEventListener('mousemove', onDrag);
-  document.addEventListener('mouseup', stopDrag);
+  // 获取初始值 - 与Svelte实现类似，简单直接
+  const startY = e.clientY;
+  const element = document.querySelector('.console-container');
+  const startHeight = parseInt(getComputedStyle(element).height);
 
-  // 添加阻止文本选择的类
-  document.body.classList.add('no-select');
-  document.body.style.cursor = 'ns-resize';
+  // 移动处理 - 与Svelte实现相似，直接处理DOM
+  function move(e) {
+    const currentHeight = startHeight - (e.clientY - startY);
+    element.style.height = `${Math.max(50, currentHeight)}px`;
+  }
+
+  // 释放处理 - 简单明了
+  function end() {
+    // 更新Vue响应式变量
+    consoleHeight.value = parseInt(getComputedStyle(element).height);
+
+    // 移除事件监听
+    window.removeEventListener('mousemove', move);
+    window.removeEventListener('mouseup', end);
+  }
+
+  // 直接在window上添加监听 - 类似Svelte的<svelte:window>方式
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
 };
 
-const onDrag = (e) => {
-  if (!isDragging.value) return;
-
-  e.preventDefault(); // 防止选中文本
-
-  // 计算高度差值（向上拖动为正，向下拖动为负）
-  const diff = startY.value - e.clientY;
-  // 更新控制台高度，确保在100到600之间
-  consoleHeight.value = Math.max(100, Math.min(600, startHeight.value + diff));
-};
-
-const stopDrag = (e) => {
-  if (!isDragging.value) return;
-
-  isDragging.value = false;
-  document.removeEventListener('mousemove', onDrag);
-  document.removeEventListener('mouseup', stopDrag);
-
-  // 移除阻止文本选择的类
-  document.body.classList.remove('no-select');
-  document.body.style.cursor = '';
-};
-
-// 折叠/展开控制台
+// 折叠/展开控制台 - 这个功能仍使用Vue响应式系统
 const toggleConsole = () => {
   if (consoleHeight.value < 50) {
     consoleHeight.value = 200; // 展开到默认高度
@@ -1572,6 +1567,8 @@ onMounted(() => {
   setTimeout(() => {
     processCodeLineHighlighting();
   }, 1000);
+
+  // 不再需要提前获取控制台元素
 });
 </script>
 
@@ -1651,9 +1648,11 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="resize-handle" @mousedown="startDrag"></div>
+    <div class="resize-handle" @mousedown="startDrag">
+      <div class="handle-bar"></div>
+    </div>
 
-    <div class="console-container" :class="outputClass" :style="{ height: `${consoleHeight}px` }">
+    <div class="console-container" ref="consoleEl" :class="outputClass" :style="{ height: `${consoleHeight}px` }">
       <div class="console-header">
         <div class="console-title">
           <h3>全局控制台输出</h3>
@@ -1720,6 +1719,7 @@ onMounted(() => {
   padding: 16px;
   background-color: #282a36;
   position: relative;
+  height: 100%; /* 确保容器占满可用高度 */
 }
 
 .code-content {
@@ -1871,29 +1871,30 @@ onMounted(() => {
 }
 
 .resize-handle {
-  height: 8px; /* 增加高度使更容易点击 */
-  margin-top: -2px; /* 向上偏移以保持视觉一致性 */
-  background-color: #414558;
+  height: 8px;
+  background-color: transparent;
   cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
   z-index: 10;
-  touch-action: none; /* 防止触摸设备上的默认行为 */
 }
 
-.resize-handle::before {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 50%;
-  transform: translateX(-50%);
+.resize-handle:hover {
+  background-color: rgba(65, 69, 88, 0.2);
+}
+
+.resize-handle .handle-bar {
   width: 40px;
-  height: 2px;
+  height: 3px;
   background-color: #6272a4;
-  border-radius: 2px;
+  border-radius: 3px;
 }
 
-.resize-handle:hover::before {
+.resize-handle:hover .handle-bar {
   background-color: #8be9fd;
+  width: 50px;
 }
 
 .console-container {
@@ -2036,6 +2037,7 @@ onMounted(() => {
   -webkit-user-select: none !important;
   -moz-user-select: none !important;
   -ms-user-select: none !important;
+  pointer-events: none !important;
 }
 
 /* 代码提示工具样式 - Element Plus风格 */
@@ -2258,5 +2260,15 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   flex-grow: 1;
+}
+
+/* 确保拖拽时不选择文本 */
+:deep(.no-select),
+:deep(.no-select *) {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  cursor: ns-resize !important;
 }
 </style>
