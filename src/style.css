@@ -1,0 +1,302 @@
+:root {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #1a1b26;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #8be9fd;
+  text-decoration: inherit;
+  transition: color 0.3s ease;
+}
+a:hover {
+  color: #50fa7b;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+button:hover {
+  border-color: #8be9fd;
+  transform: translateY(-2px);
+}
+button:focus,
+button:focus-visible {
+  outline: 2px solid rgba(139, 233, 253, 0.5);
+}
+
+.card {
+  padding: 2em;
+}
+
+#app {
+  width: 100%;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+/* 默认代码高亮样式 - 高级VSCode风格 */
+.code-content {
+  font-size: 16px !important;
+  font-family: 'Operator Mono', 'SF Mono', 'Consolas', 'Monaco', 'Menlo', monospace !important;
+  line-height: 1.7 !important;
+  letter-spacing: 0.05em;
+}
+
+.code-line {
+  padding: 3px 0;
+}
+
+.line-number {
+  font-size: 14px;
+  color: #637777 !important;
+  padding-right: 1.8em !important;
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+
+/* Night Owl 风格的代码高亮 */
+.token.comment { color: #637777; font-style: italic; }
+.token.keyword { color: #c792ea; font-weight: 500; }
+.token.string { color: #ecc48d; }
+.token.function { color: #82aaff; }
+.token.number { color: #f78c6c; }
+.token.operator { color: #c792ea; }
+.token.punctuation { color: #7fdbca; }
+.token.parameter { color: #7fdbca; }
+.token.class-name { color: #ffcb8b; font-weight: 500; }
+.token.boolean { color: #ff5874; font-weight: 500; }
+.token.property { color: #80cbc4; }
+.token.regex { color: #80CBC4; }
+.token.tag { color: #7fdbca; }
+.token.selector { color: #ff5874; }
+.token.attr-name { color: #80CBC4; }
+.token.attr-value { color: #ecc48d; }
+.token.entity { color: #82aaff; }
+
+/* 增强高亮元素 */
+.token.function-definition {
+  color: #82aaff !important;
+  font-weight: bold;
+  text-decoration: underline;
+  text-decoration-color: rgba(130, 170, 255, 0.5);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.token.class-definition {
+  color: #ffcb8b !important;
+  font-weight: bold;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 203, 139, 0.5);
+  text-decoration-style: double;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.token.this-keyword {
+  color: #ff5874 !important;
+  font-style: italic;
+  font-weight: bold;
+}
+
+.token.console {
+  color: #7fdbca !important;
+}
+
+.token.console-method {
+  color: #82aaff !important;
+}
+
+.enhanced-comment {
+  opacity: 0.8;
+  font-style: italic;
+  font-family: 'Operator Mono', 'SF Mono', monospace;
+}
+
+.enhanced-comment:hover {
+  opacity: 1;
+  color: #82aaff;
+}
+
+/* 增强代码可读性 */
+.code-content {
+  background-color: #011627 !important;
+  padding: 16px !important;
+  border-radius: 8px;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5) !important;
+}
+
+.code-line {
+  background-color: #011627;
+  transition: background-color 0.3s;
+}
+
+.code-line:hover {
+  background-color: #0e2c45;
+}
+
+/* 函数调用高亮 */
+.function-call-highlight {
+  color: #82aaff !important;
+  cursor: pointer;
+  font-weight: bold;
+  padding: 0 3px;
+  border-radius: 3px;
+  transition: all 0.3s ease;
+  border-bottom: 1px dashed #82aaff;
+  position: relative;
+  text-decoration: none;
+  outline: none;
+}
+
+.function-call-highlight:hover,
+.function-call-highlight:focus {
+  color: #adcbff !important;
+  background-color: rgba(130, 170, 255, 0.15);
+  border-bottom: 1px solid #adcbff;
+  box-shadow: 0 2px 4px rgba(130, 170, 255, 0.2);
+}
+
+/* 悬浮函数定义的弹窗样式 - Dracula 风格 */
+.custom-code-popover .token.comment { color: #6272a4; }
+.custom-code-popover .token.keyword { color: #f38c3e; }
+.custom-code-popover .token.string { color: #f1fa8c; }
+.custom-code-popover .token.function { color: #50fa7b; }
+.custom-code-popover .token.number { color: #bd93f9; }
+.custom-code-popover .token.operator { color: #8be9fd; }
+.custom-code-popover .token.punctuation { color: #f8f8f2; }
+.custom-code-popover .token.parameter { color: #ffb86c; }
+.custom-code-popover .token.class-name { color: #8be9fd; }
+.custom-code-popover .token.boolean { color: #bd93f9; }
+.custom-code-popover .token.property { color: #8be9fd; }
+.custom-code-popover .token.regex { color: #50fa7b; }
+.custom-code-popover .token.tag { color: #f38c3e; }
+.custom-code-popover .token.selector { color: #50fa7b; }
+.custom-code-popover .token.attr-name { color: #ffb86c; }
+.custom-code-popover .token.attr-value { color: #f1fa8c; }
+.custom-code-popover .token.entity { color: #8be9fd; }
+
+/* 增加弹窗大小和增强UI */
+.custom-code-popover {
+  width: 700px !important;
+  height: 600px !important;
+  max-width: 90vw !important;
+  max-height: 80vh !important;
+  font-size: 16px !important;
+}
+
+.custom-code-popover .line-content {
+  font-family: 'Operator Mono', 'SF Mono', 'Consolas', 'Monaco', 'Menlo', monospace !important;
+  font-size: 15px !important;
+  line-height: 1.6 !important;
+  letter-spacing: 0.03em;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #44475a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6272a4;
+}
+
+/* 酷炫科技风元素 */
+.tech-glow {
+  box-shadow: 0 0 10px rgba(139, 233, 253, 0.5);
+  border: 1px solid rgba(139, 233, 253, 0.3);
+  transition: all 0.3s ease;
+}
+
+.tech-glow:hover {
+  box-shadow: 0 0 20px rgba(139, 233, 253, 0.7);
+}
+
+.tech-gradient {
+  background: linear-gradient(135deg, #8be9fd, #50fa7b);
+}
+
+.tech-text {
+  background: linear-gradient(to right, #8be9fd, #50fa7b);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 炫酷动画 */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+@keyframes pulse-glow {
+  0% { box-shadow: 0 0 5px rgba(139, 233, 253, 0.5); }
+  50% { box-shadow: 0 0 15px rgba(139, 233, 253, 0.8); }
+  100% { box-shadow: 0 0 5px rgba(139, 233, 253, 0.5); }
+}
+
+.float-animation {
+  animation: float 6s ease-in-out infinite;
+}
+
+.pulse-animation {
+  animation: pulse-glow 3s infinite;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
+}

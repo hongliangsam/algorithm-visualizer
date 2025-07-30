@@ -1,0 +1,2274 @@
+<script setup>
+import { ref, onMounted, watch, reactive, computed, nextTick } from 'vue';
+import { useRoute } from 'vue-router';
+import Prism from 'prismjs';
+import 'prismjs/themes/prism-tomorrow.css';
+import 'prismjs/components/prism-javascript';
+import { VideoPlay, Download, Share, CaretTop, CaretBottom } from '@element-plus/icons-vue';
+import tippy from 'tippy.js';
+import 'tippy.js/dist/tippy.css';
+
+// 添加函数定义和调用的存储结构
+const functionDefinitions = ref({}); // 存储函数定义信息
+const linePositions = ref([]); // 存储行位置信息，用于跳转
+const highlightedLine = ref(null); // 添加高亮行引用
+
+// 导入所有章节文件
+// 使用 Vite 的动态导入功能
+const modules = import.meta.glob('../scripts/chapters/**/*.js', { query: '?raw', import: 'default', eager: true });
+// 导入所有模块文件作为原始内容
+const moduleFiles = import.meta.glob('../scripts/chapters/modules/*.js', { query: '?raw', import: 'default', eager: true });
+
+const props = defineProps({
+  filePath: String
+});
+
+const route = useRoute();
+const code = ref('');
+const fileName = ref('');
+const consoleOutput = ref([]);
+const isLoading = ref(false);
+const isExecuting = ref(false);
+const outputClass = ref('');
+const consoleHeight = ref(200);
+// 提升这些变量到组件级别，不在事件处理函数中创建局部变量
+const consoleEl = ref(null);
+// 控制台拖拽相关变量
+let consoleH;
+let cStartY;
+let minConsoleHeight = 50;
+
+// 解析后的代码行，包含是否是console语句的标记
+const codeLines = reactive([]);
+// 每行的输出结果
+const lineOutputs = reactive({});
+
+// 获取文件内容
+const fetchFileContent = async (path) => {
+  if (!path) return;
+
+  isLoading.value = true;
+  fileName.value = path.split('/').pop();
+
+  // 清空之前的数据
+  codeLines.length = 0;
+  Object.keys(lineOutputs).forEach(key => delete lineOutputs[key]);
+  functionDefinitions.value = {};
+
+  try {
+    // 构建文件路径
+    const filePath = `../scripts/chapters/${path}`;
+
+    // 查找匹配的文件
+    const matchingPaths = Object.keys(modules).filter(key => key.endsWith(`/${path}`));
+
+    if (matchingPaths.length > 0) {
+      // 找到匹配的文件，使用第一个匹配项
+      code.value = modules[matchingPaths[0]];
+
+      // 处理代码行
+      processCodeLines();
+
+            // 解析函数定义
+      parseFunctionDefinitions();
+
+      // 稍后会通过watch触发工具提示初始化
+    } else {
+      // 未找到匹配的文件，显示错误信息
+      code.value = `// 找不到文件: ${path}\n// 请检查文件路径是否正确`;
+      console.error(`找不到文件: ${path}`);
+    }
+  } catch (error) {
+    console.error('获取文件内容失败:', error);
+    code.value = `// 加载文件时出错: ${error.message}`;
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+// 处理代码行，识别代码块
+const processCodeLines = () => {
+  const lines = code.value.split('\n');
+  let inComment = false;
+  let commentStack = 0;
+  let codeBlocks = [];
+
+  // 检测Driver Code
+  let driverCodeIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes('Driver Code')) {
+      driverCodeIndex = i;
+      break;
+    }
+  }
+
+  if (driverCodeIndex !== -1) {
+    // 从Driver Code开始，识别每个代码块
+    let currentBlockStart = -1;
+    let isInBlock = false;
+
+    for (let i = driverCodeIndex + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      // 跳过空行
+      if (line === '') {
+        continue;
+      }
+
+      // 如果找到代码块注释标记（通常是 /* 某操作 */）
+      if (line.startsWith('/*') && line.endsWith('*/') && !line.includes('Driver Code')) {
+        // 结束前一个代码块（如果存在）
+        if (isInBlock && currentBlockStart !== -1) {
+          codeBlocks.push({
+            start: currentBlockStart,
+            end: i - 1
+          });
+        }
+
+        // 开始新代码块
+        currentBlockStart = i;
+        isInBlock = true;
+      }
+      // 如果已经在代码块中且遇到console输出后的下一个注释块，则结束当前代码块
+      else if (isInBlock && line.startsWith('/*') && line.endsWith('*/')) {
+        // 检查前面几行是否有console语句或函数调用
+        let hasConsoleOrFuncBeforeThisBlock = false;
+        for (let j = i - 1; j >= currentBlockStart && j >= i - 5; j--) {
+          if (lines[j].includes('console.') ||
+              (lines[j].includes('(') && lines[j].includes(')') && !lines[j].includes('if') && !lines[j].includes('for'))) {
+            hasConsoleOrFuncBeforeThisBlock = true;
+            break;
+          }
+        }
+
+        if (hasConsoleOrFuncBeforeThisBlock) {
+          // 结束当前代码块
+          codeBlocks.push({
+            start: currentBlockStart,
+            end: i - 1
+          });
+
+          // 开始新代码块
+          currentBlockStart = i;
+        }
+      }
+    }
+
+    // 添加最后一个代码块
+    if (isInBlock && currentBlockStart !== -1) {
+      codeBlocks.push({
+        start: currentBlockStart,
+        end: lines.length - 1
+      });
+    }
+  }
+
+  // 如果没有识别到代码块，将整个文件作为一个代码块
+  if (codeBlocks.length === 0) {
+    codeBlocks.push({
+      start: 0,
+      end: lines.length - 1
+    });
+  }
+
+  // 创建代码行对象
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let isBlockEnd = false;
+    let blockData = null;
+
+    // 检查当前行是否是某个代码块的结束行
+    for (const block of codeBlocks) {
+      if (i === block.end) {
+        isBlockEnd = true;
+        blockData = block;
+        break;
+      }
+    }
+
+    codeLines.push({
+      index: i,
+      text: line,
+      isCodeBlockEnd: isBlockEnd
+    });
+
+    // 为代码块结束行添加输出对象
+    if (isBlockEnd && blockData) {
+      lineOutputs[i] = {
+        logs: [],
+        status: '',
+        loading: false,
+        blockStart: blockData.start,
+        blockEnd: blockData.end
+      };
+    }
+  }
+};
+
+// 解析代码中的函数定义
+const parseFunctionDefinitions = () => {
+  if (!code.value) return;
+
+  functionDefinitions.value = {};
+  const lines = code.value.split('\n');
+
+  console.log('开始解析函数定义:', fileName.value);
+
+  // 正则表达式匹配不同的函数定义方式
+  const functionPatterns = [
+    // function declaration: function name(...) {...}
+    { regex: /function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(([^)]*)\)/, type: 'declaration' },
+    // function expression: const/let/var name = function(...) {...}
+    { regex: /(const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*function\s*\(([^)]*)\)/, type: 'expression' },
+    // arrow function: const/let/var name = (...) => {...}
+    { regex: /(const|let|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*\(([^)]*)\)\s*=>/, type: 'arrow' },
+    // class method: methodName(...) {...}
+    { regex: /([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(([^)]*)\)\s*{/, type: 'method' }
+  ];
+
+  // 存储每个函数的定义行号和参数
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // 跳过明显是注释的行
+    if (line.trim().startsWith('//') || line.trim().startsWith('*')) {
+      continue;
+    }
+
+    for (const pattern of functionPatterns) {
+      const match = line.match(pattern.regex);
+
+      if (match) {
+        let funcName, params;
+
+        if (pattern.type === 'declaration') {
+          funcName = match[1];
+          params = match[2];
+        } else if (pattern.type === 'expression') {
+          funcName = match[2];
+          params = match[3];
+        } else if (pattern.type === 'arrow') {
+          funcName = match[2];
+          params = match[3];
+        } else if (pattern.type === 'method') {
+          funcName = match[1];
+          params = match[2];
+
+          // 跳过for循环等非函数定义
+          if (funcName === 'for' || funcName === 'if' || funcName === 'while' || funcName === 'switch') {
+            continue;
+          }
+        }
+
+        // 获取函数定义的上下文（包括注释）
+        let startLine = i;
+        // 向上查找注释
+        while (startLine > 0) {
+          const prevLine = lines[startLine - 1].trim();
+          if (prevLine.startsWith('//') || prevLine.startsWith('/*') || prevLine.startsWith('*')) {
+            startLine--;
+          } else {
+            break;
+          }
+        }
+
+        // 提取函数定义的代码块
+        let endLine = i;
+        let braceCount = line.split('{').length - line.split('}').length;
+
+        // 如果第一行有未闭合的花括号，继续向下查找
+        if (braceCount > 0) {
+          for (let j = i + 1; j < lines.length; j++) {
+            const nextLine = lines[j];
+            braceCount += nextLine.split('{').length - nextLine.split('}').length;
+
+            if (braceCount <= 0) {
+              endLine = j;
+              break;
+            }
+          }
+        }
+
+        // 构建函数定义对象
+        const definition = {
+          name: funcName,
+          params: params.split(',').map(p => p.trim()).filter(p => p),
+          startLine: startLine,
+          endLine: endLine,
+          lineNumber: i,
+          definitionText: lines.slice(startLine, endLine + 1).join('\n')
+        };
+
+        functionDefinitions.value[funcName] = definition;
+        break; // 找到一个匹配后不再继续
+      }
+    }
+  }
+
+  // 存储所有行的位置信息，用于跳转
+  nextTick(() => {
+    const codeLineElements = document.querySelectorAll('.code-line');
+    linePositions.value = Array.from(codeLineElements).map(el => {
+      const rect = el.getBoundingClientRect();
+      return {
+        top: rect.top,
+        height: rect.height
+      };
+    });
+  });
+
+  console.log('解析到的函数定义:', functionDefinitions.value);
+
+  // 将函数定义信息存储在window对象上，方便调试
+  window._functionDefinitions = functionDefinitions.value;
+};
+
+// 从HTML内容中提取纯文本内容（移除HTML标签）
+const stripHtml = (html) => {
+  const tmp = document.createElement('DIV');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+};
+
+// 获取代码行的高亮HTML
+const getHighlightedLine = (line) => {
+  try {
+    // 使用Prism进行基本的语法高亮
+    let html = Prism.highlight(line, Prism.languages.javascript, 'javascript');
+
+    // 增强高亮: 为特定模式添加额外样式
+    // 1. 强调函数定义
+    html = html.replace(
+      /(function\s+)([a-zA-Z_$][a-zA-Z0-9_$]*)/g,
+      '$1<span class="token function-definition">$2</span>'
+    );
+
+    // 2. 强调类定义和类方法
+    html = html.replace(
+      /(class\s+)([a-zA-Z_$][a-zA-Z0-9_$]*)/g,
+      '$1<span class="token class-definition">$2</span>'
+    );
+
+    // 3. 高亮this关键字
+    html = html.replace(
+      /\b(this)\b/g,
+      '<span class="token this-keyword">$1</span>'
+    );
+
+    // 4. 强调console方法
+    html = html.replace(
+      /(console\.)(log|error|warn|info)/g,
+      '<span class="token console">$1</span><span class="token console-method">$2</span>'
+    );
+
+    // 5. 增强注释可读性
+    html = html.replace(
+      /(<span class="token comment">.*?<\/span>)/g,
+      '<span class="enhanced-comment">$1</span>'
+    );
+
+    // 返回高亮后的HTML
+    return html;
+  } catch (error) {
+    console.error('高亮处理出错:', error);
+    // 出错时返回原始行
+    return line;
+  }
+};
+
+  // 在DOM更新后处理函数调用高亮
+const processCodeLineHighlighting = () => {
+  nextTick(() => {
+    // 确保已经解析了函数定义
+    if (Object.keys(functionDefinitions.value).length === 0) {
+      return;
+    }
+
+    // 获取所有代码行内容
+    const codeLineContents = document.querySelectorAll('.line-content');
+
+    // 遍历每一行
+    codeLineContents.forEach(lineElement => {
+      // 获取行的文本内容
+      const lineText = lineElement.textContent || '';
+
+      // 遍历所有函数定义
+      for (const funcName of Object.keys(functionDefinitions.value)) {
+        // 检查这一行是否包含函数调用
+        if (lineText.includes(funcName + '(')) {
+          // 获取函数定义对象
+          const funcDef = functionDefinitions.value[funcName];
+
+          // 使用DOM操作直接处理函数调用
+          const textNodes = [];
+          lineElement.childNodes.forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE) {
+              textNodes.push(node);
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+              // 检查元素节点内的文本
+              const nodeText = node.textContent || '';
+              if (nodeText === funcName &&
+                  lineElement.textContent.substring(
+                    lineElement.textContent.indexOf(nodeText) + nodeText.length,
+                    lineElement.textContent.indexOf(nodeText) + nodeText.length + 1
+                  ) === '(') {
+                // 创建高亮元素
+                const highlightSpan = document.createElement('span');
+                highlightSpan.className = 'function-call-highlight';
+
+                // 设置函数名属性，用于查找函数定义
+                highlightSpan.setAttribute('data-function', funcName);
+
+                // 设置函数文本
+                highlightSpan.textContent = funcName;
+
+                // 添加点击事件
+                highlightSpan.onclick = () => jumpToFunction(funcName);
+
+                // 替换原始节点
+                node.parentNode.replaceChild(highlightSpan, node);
+              }
+            }
+          });
+
+          // 处理文本节点
+          textNodes.forEach(textNode => {
+            const text = textNode.textContent;
+            const parts = text.split(funcName + '(');
+
+            if (parts.length > 1) {
+              // 创建文档片段
+              const fragment = document.createDocumentFragment();
+
+              // 添加第一部分
+              if (parts[0]) {
+                fragment.appendChild(document.createTextNode(parts[0]));
+              }
+
+              // 遍历剩余部分
+              for (let i = 1; i < parts.length; i++) {
+                // 创建高亮元素
+                const highlightSpan = document.createElement('span');
+                highlightSpan.className = 'function-call-highlight';
+                highlightSpan.setAttribute('data-function', funcName);
+                highlightSpan.textContent = funcName;
+
+                // 添加点击事件
+                highlightSpan.onclick = () => jumpToFunction(funcName);
+
+                // 添加到片段
+                fragment.appendChild(highlightSpan);
+                fragment.appendChild(document.createTextNode('('));
+
+                // 添加剩余文本
+                if (parts[i]) {
+                  fragment.appendChild(document.createTextNode(parts[i]));
+                }
+              }
+
+              // 替换原始节点
+              textNode.parentNode.replaceChild(fragment, textNode);
+            }
+          });
+        }
+      }
+    });
+
+    // 初始化工具提示
+    initTooltips();
+  });
+};
+
+// 跳转到函数定义
+const jumpToFunction = (funcName) => {
+  const funcDef = functionDefinitions.value[funcName];
+  if (funcDef && linePositions.value.length > 0) {
+    const targetLine = funcDef.lineNumber;
+    const codeContainer = document.querySelector('.code-container');
+
+    if (codeContainer && linePositions.value[targetLine]) {
+      // 计算目标行的位置并滚动到该位置
+      codeContainer.scrollTop = linePositions.value[targetLine].top - linePositions.value[0].top;
+
+      // 闪烁高亮目标行
+      highlightTargetLine(targetLine);
+    }
+  }
+};
+
+// 临时高亮目标行
+const highlightTargetLine = (lineIndex) => {
+  highlightedLine.value = lineIndex; // 设置高亮行
+  const targetLine = document.querySelectorAll('.code-line')[lineIndex];
+  if (targetLine) {
+    targetLine.classList.add('target-highlight');
+    setTimeout(() => {
+      targetLine.classList.remove('target-highlight');
+      highlightedLine.value = null; // 清除高亮行
+    }, 2000);
+  }
+};
+
+// 存储文件执行上下文，以文件名为键
+const fileExecutionContexts = {};
+
+// 执行代码块
+const runCodeBlock = async (lineIndex) => {
+  const output = lineOutputs[lineIndex];
+  if (!output || output.loading) return;
+
+  // 提前定义变量，确保finally块中可以访问
+  let originalConsoleLog;
+  let originalConsoleError;
+  let originalConsoleWarn;
+  let originalConsoleInfo;
+  let logs = [];
+  let allLogs = []; // 记录所有日志
+
+  try {
+    // 设置加载状态
+    output.loading = true;
+    output.logs = [];
+    output.status = '';
+
+    // 获取代码块范围
+    const blockStart = output.blockStart;
+    const blockEnd = output.blockEnd;
+
+    // 查找所有代码块注释的位置
+    const commentBlocks = [];
+    for (let i = 0; i < codeLines.length; i++) {
+      const line = codeLines[i].text.trim();
+      if (line.startsWith('/*') && line.endsWith('*/')) {
+        // 查找对应代码块中第一个console.log语句的内容
+        let consoleContent = '';
+        for (let j = i + 1; j < codeLines.length; j++) {
+          if (codeLines[j].text.includes('console.log')) {
+            const match = codeLines[j].text.match(/console\.log\(\s*['"]([^'"]*)['"]/);
+            if (match && match[1]) {
+              consoleContent = match[1];
+        break;
+      }
+    }
+
+          // 如果遇到下一个注释块，停止搜索
+          if (j > i + 1 && codeLines[j].text.trim().startsWith('/*') && codeLines[j].text.trim().endsWith('*/')) {
+          break;
+          }
+        }
+
+        commentBlocks.push({
+          start: i,
+          consoleContent: consoleContent
+        });
+      }
+    }
+
+    // 找到当前代码块在数组中的位置
+    let currentBlockIndex = -1;
+    for (let i = 0; i < commentBlocks.length; i++) {
+      if (commentBlocks[i].start >= blockStart && commentBlocks[i].start <= blockEnd) {
+        currentBlockIndex = i;
+        break;
+      }
+    }
+
+    // 准备执行环境
+    // 处理代码，增加必要的类定义
+    const fullCode = `
+      // 定义必要的类
+      class Vertex {
+        constructor(val) {
+          this.val = val;
+        }
+      }
+
+      ${!code.value.includes('class GraphAdjMat') ? `
+      // 仅在用户代码中没有定义GraphAdjMat时才定义它
+      class GraphAdjMat {
+        constructor(vertices, edges) {
+          this.vertices = [...vertices];
+          this.adjMat = [];
+
+          // 初始化邻接矩阵
+          for (let i = 0; i < vertices.length; i++) {
+            const row = [];
+            for (let j = 0; j < vertices.length; j++) {
+              row.push(0);
+            }
+            this.adjMat.push(row);
+          }
+
+          // 添加边
+          for (const edge of edges) {
+            this.addEdge(edge[0], edge[1]);
+          }
+        }
+
+        size() {
+          return this.vertices.length;
+        }
+
+        addEdge(i, j) {
+          if (i < 0 || j < 0 || i >= this.vertices.length || j >= this.vertices.length || i === j) {
+            throw new Error('Invalid vertex indices');
+          }
+          this.adjMat[i][j] = 1;
+          this.adjMat[j][i] = 1;
+        }
+
+        removeEdge(i, j) {
+          if (i < 0 || j < 0 || i >= this.vertices.length || j >= this.vertices.length || i === j) {
+            throw new Error('Invalid vertex indices');
+          }
+          this.adjMat[i][j] = 0;
+          this.adjMat[j][i] = 0;
+        }
+
+        addVertex(val) {
+          this.vertices.push(val);
+
+          // 扩展邻接矩阵
+          for (let i = 0; i < this.adjMat.length; i++) {
+            this.adjMat[i].push(0);
+          }
+          const newRow = new Array(this.vertices.length).fill(0);
+          this.adjMat.push(newRow);
+        }
+
+        removeVertex(index) {
+          if (index < 0 || index >= this.vertices.length) {
+            throw new Error('Invalid vertex index');
+          }
+
+          this.vertices.splice(index, 1);
+          this.adjMat.splice(index, 1);
+          for (let i = 0; i < this.adjMat.length; i++) {
+            this.adjMat[i].splice(index, 1);
+          }
+        }
+
+        print() {
+          console.log(' 顶点列表 = ', JSON.stringify(this.vertices));
+          console.log(' 邻接矩阵 =', JSON.stringify(this.adjMat));
+        }
+      }` : '// GraphAdjMat类已在用户代码中定义'}
+
+      // 用户代码
+      ${code.value
+      .replace(/export\s*\{[^}]*\}\s*;?/g, '')
+        .replace(/import\s+\{\s*([^}]+)\s*\}\s+from\s+['"]([^'"]+)['"]/g, '// 导入已处理')}
+    `;
+
+    // 保存原始控制台方法
+    originalConsoleLog = console.log;
+    originalConsoleError = console.error;
+    originalConsoleWarn = console.warn;
+    originalConsoleInfo = console.info;
+
+    // 重写console方法以捕获输出
+    console.log = (...args) => {
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      allLogs.push({ type: 'log', content, timestamp: Date.now() });
+      originalConsoleLog.apply(console, args);
+    };
+
+    console.error = (...args) => {
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      allLogs.push({ type: 'error', content, timestamp: Date.now() });
+      originalConsoleError.apply(console, args);
+    };
+
+    console.warn = (...args) => {
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      allLogs.push({ type: 'warn', content, timestamp: Date.now() });
+      originalConsoleWarn.apply(console, args);
+    };
+
+    console.info = (...args) => {
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      allLogs.push({ type: 'info', content, timestamp: Date.now() });
+      originalConsoleInfo.apply(console, args);
+    };
+
+    // 执行整个代码
+    new Function(fullCode)();
+
+    // 获取当前代码块的console标识内容
+    const currentConsoleContent = currentBlockIndex >= 0 ? commentBlocks[currentBlockIndex].consoleContent : '';
+
+    // 获取下一个代码块的console标识内容
+    const nextConsoleContent = currentBlockIndex >= 0 && currentBlockIndex < commentBlocks.length - 1
+      ? commentBlocks[currentBlockIndex + 1].consoleContent
+      : '';
+
+    // 确定日志截取范围
+    let startIndex = -1;
+    let endIndex = allLogs.length;
+
+    // 查找当前代码块第一个console的输出位置
+    if (currentConsoleContent) {
+          for (let i = 0; i < allLogs.length; i++) {
+        if (allLogs[i].content.includes(currentConsoleContent)) {
+          startIndex = i;
+              break;
+            }
+          }
+        }
+
+    // 查找下一个代码块第一个console的输出位置
+    if (nextConsoleContent) {
+              for (let i = 0; i < allLogs.length; i++) {
+        if (allLogs[i].content.includes(nextConsoleContent)) {
+          endIndex = i;
+                  break;
+        }
+      }
+    }
+
+    // 如果找不到精确匹配，使用更宽松的匹配
+    if (startIndex === -1) {
+      // 尝试提取当前代码块中所有console.log语句
+      for (let i = blockStart; i <= blockEnd; i++) {
+        const line = codeLines[i].text;
+        if (line.includes('console.log')) {
+          // 提取console.log中的参数
+          const match = line.match(/console\.log\(([^)]+)\)/);
+          if (match && match[1]) {
+            const params = match[1].trim().replace(/['"]/g, '');
+            // 在日志中查找匹配
+            for (let j = 0; j < allLogs.length; j++) {
+              if (allLogs[j].content.includes(params)) {
+                startIndex = j;
+              break;
+            }
+          }
+            if (startIndex !== -1) break;
+          }
+        }
+      }
+    }
+
+    // 如果仍然找不到起始位置，使用默认值
+    if (startIndex === -1 && allLogs.length > 0) {
+      startIndex = 0;
+    }
+
+    // 截取日志
+    if (startIndex !== -1) {
+      logs = allLogs.slice(startIndex, endIndex);
+    }
+
+    // 如果没有输出，添加一个默认消息
+    if (logs.length === 0) {
+      logs.push({ type: 'info', content: '代码块执行成功，但没有找到匹配的输出' });
+    }
+
+    // 更新输出状态
+    output.status = 'success';
+    output.logs = logs;
+
+  } catch (err) {
+    console.error('执行代码块时出错:', err);
+    output.logs.push({
+      type: 'error',
+      content: err.toString()
+    });
+    output.status = 'error';
+  } finally {
+    // 恢复原始的 console 方法
+    if (originalConsoleLog) console.log = originalConsoleLog;
+    if (originalConsoleError) console.error = originalConsoleError;
+    if (originalConsoleWarn) console.warn = originalConsoleWarn;
+    if (originalConsoleInfo) console.info = originalConsoleInfo;
+
+    // 结束加载状态
+    output.loading = false;
+  }
+};
+
+// 执行代码（整个文件）
+const runCode = async () => {
+  if (isExecuting.value) return;
+
+  // 在try之前定义变量，确保finally块中可以访问
+  let originalConsoleLog;
+  let originalConsoleError;
+  let originalConsoleWarn;
+  let originalConsoleInfo;
+  let logs = [];
+
+  try {
+    isExecuting.value = true;
+    consoleOutput.value = [];
+    outputClass.value = '';
+
+    // 处理代码，移除类定义和export语句
+    let processedCode = code.value
+      // 移除export语句
+      .replace(/export\s*\{[^}]*\}\s*;?/g, '')
+      // 移除Vertex和GraphAdjList类定义，防止重复声明
+      .replace(/class\s+Vertex\s+\{[\s\S]*?\n\}/g, '/* Vertex类已由模拟器提供 */')
+      .replace(/class\s+GraphAdjList\s+\{[\s\S]*?\n\}/g, '/* GraphAdjList类已由模拟器提供 */')
+      // 转换import语句为注释
+      .replace(/import\s+\{\s*([^}]+)\s*\}\s+from\s+['"]([^'"]+)['"]/g, (match, imports, path) => {
+        return `// 导入已由模拟器提供：${imports}`;
+      });
+
+    // 准备日志收集
+    logs = [];
+    originalConsoleLog = console.log;
+    originalConsoleError = console.error;
+    originalConsoleWarn = console.warn;
+    originalConsoleInfo = console.info;
+
+    // 重写控制台方法
+    console.log = (...args) => {
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      logs.push({ type: 'log', content });
+    };
+
+    console.error = (...args) => {
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      logs.push({ type: 'error', content });
+      originalConsoleError.apply(console, args);
+    };
+
+    console.warn = (...args) => {
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      logs.push({ type: 'warn', content });
+      originalConsoleWarn.apply(console, args);
+    };
+
+    console.info = (...args) => {
+      const content = args.map(arg =>
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      logs.push({ type: 'info', content });
+      originalConsoleInfo.apply(console, args);
+    };
+
+    // 在沙箱环境中提供模拟类
+    const sandboxCode = `
+      // 定义Vertex类
+      class Vertex {
+        constructor(val) {
+          this.val = val;
+        }
+
+        static valsToVets(vals) {
+          const vets = [];
+          for (let i = 0; i < vals.length; i++) {
+            vets[i] = new Vertex(vals[i]);
+          }
+          return vets;
+        }
+
+        static vetsToVals(vets) {
+          const vals = [];
+          for (const vet of vets) {
+            vals.push(vet.val);
+          }
+          return vals;
+        }
+      }
+
+      // 定义GraphAdjList类
+      class GraphAdjList {
+        constructor(edges) {
+          this.adjList = new Map();
+          // 添加所有顶点和边
+          if (edges) {
+            for (const edge of edges) {
+              this.addVertex(edge[0]);
+              this.addVertex(edge[1]);
+              this.addEdge(edge[0], edge[1]);
+            }
+          }
+        }
+
+        size() {
+          return this.adjList.size;
+        }
+
+        addEdge(vet1, vet2) {
+          if (
+            !this.adjList.has(vet1) ||
+            !this.adjList.has(vet2) ||
+            vet1 === vet2
+          ) {
+            throw new Error('Illegal Argument Exception');
+          }
+          // 添加边 vet1 - vet2
+          this.adjList.get(vet1).push(vet2);
+          this.adjList.get(vet2).push(vet1);
+        }
+
+        removeEdge(vet1, vet2) {
+          if (
+            !this.adjList.has(vet1) ||
+            !this.adjList.has(vet2) ||
+            vet1 === vet2
+          ) {
+            throw new Error('Illegal Argument Exception');
+          }
+          // 删除边 vet1 - vet2
+          this.adjList.get(vet1).splice(this.adjList.get(vet1).indexOf(vet2), 1);
+          this.adjList.get(vet2).splice(this.adjList.get(vet2).indexOf(vet1), 1);
+        }
+
+        addVertex(vet) {
+          if (this.adjList.has(vet)) return;
+          // 在邻接表中添加一个新链表
+          this.adjList.set(vet, []);
+        }
+
+        removeVertex(vet) {
+          if (!this.adjList.has(vet)) {
+            throw new Error('Illegal Argument Exception');
+          }
+          // 在邻接表中删除顶点 vet 对应的链表
+          this.adjList.delete(vet);
+          // 遍历其他顶点的链表，删除所有包含 vet 的边
+          for (let set of this.adjList.values()) {
+            const index = set.indexOf(vet);
+            if (index > -1) {
+              set.splice(index, 1);
+            }
+          }
+        }
+
+        print() {
+          console.log('邻接表 =');
+          for (const [key, value] of this.adjList) {
+            const tmp = [];
+            for (const vertex of value) {
+              tmp.push(vertex.val);
+            }
+            console.log(key.val + ': ' + tmp.join(','));
+          }
+        }
+      }
+
+      // 执行用户代码
+      try {
+        ${processedCode}
+
+        // 检查是否存在runExample函数并执行
+        if (typeof runExample === 'function') {
+          runExample();
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    `;
+
+    // 执行代码
+    new Function('console', sandboxCode)(console);
+
+    // 更新控制台输出
+    consoleOutput.value = logs;
+    outputClass.value = 'success';
+  } catch (err) {
+    console.error('执行代码时出错:', err);
+    consoleOutput.value.push({
+      type: 'error',
+      content: err.toString()
+    });
+    outputClass.value = 'error';
+  } finally {
+    // 恢复原始的console方法
+    if (originalConsoleLog) console.log = originalConsoleLog;
+    if (originalConsoleError) console.error = originalConsoleError;
+    if (originalConsoleWarn) console.warn = originalConsoleWarn;
+    if (originalConsoleInfo) console.info = originalConsoleInfo;
+
+    isExecuting.value = false;
+  }
+};
+
+// 下载代码
+const downloadCode = () => {
+  const blob = new Blob([code.value], { type: 'text/javascript' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName.value;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+// 分享代码
+const shareCode = async () => {
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: fileName.value,
+        text: '查看这个算法代码',
+        url: window.location.href
+      });
+    } catch (err) {
+      console.error('分享失败:', err);
+    }
+  } else {
+    // 如果浏览器不支持原生分享，则复制链接到剪贴板
+    await navigator.clipboard.writeText(window.location.href);
+    // 可以添加一个提示，告知用户链接已复制
+  }
+};
+
+// 控制台大小调整方法 - 使用类似Svelte的风格实现
+const startDrag = (e) => {
+  // 阻止默认行为
+  e.preventDefault();
+
+  // 获取初始值 - 与Svelte实现类似，简单直接
+  const startY = e.clientY;
+  const element = document.querySelector('.console-container');
+  const startHeight = parseInt(getComputedStyle(element).height);
+
+  // 移动处理 - 与Svelte实现相似，直接处理DOM
+  function move(e) {
+    const currentHeight = startHeight - (e.clientY - startY);
+    element.style.height = `${Math.max(50, currentHeight)}px`;
+  }
+
+  // 释放处理 - 简单明了
+  function end() {
+    // 更新Vue响应式变量
+    consoleHeight.value = parseInt(getComputedStyle(element).height);
+
+    // 移除事件监听
+    window.removeEventListener('mousemove', move);
+    window.removeEventListener('mouseup', end);
+  }
+
+  // 直接在window上添加监听 - 类似Svelte的<svelte:window>方式
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+};
+
+// 折叠/展开控制台 - 这个功能仍使用Vue响应式系统
+const toggleConsole = () => {
+  if (consoleHeight.value < 50) {
+    consoleHeight.value = 200; // 展开到默认高度
+  } else {
+    consoleHeight.value = 40; // 折叠到最小高度
+  }
+};
+
+// 在每次DOM更新后初始化工具提示
+const initTooltips = () => {
+  // 使用延迟执行，确保DOM已完全渲染
+  setTimeout(() => {
+    try {
+      // 查找所有带有函数调用标记的元素
+      const functionCalls = document.querySelectorAll('.function-call-highlight');
+
+      if (functionCalls.length > 0) {
+        console.log('找到函数调用元素:', functionCalls.length);
+
+        // 清除之前的工具提示实例
+        if (window._tippyInstances) {
+          window._tippyInstances.forEach(instance => {
+            try {
+              instance.destroy();
+            } catch (e) {
+              // 忽略销毁错误
+            }
+          });
+        }
+
+              // 移除所有现有的弹窗
+      document.querySelectorAll('.custom-code-popover').forEach(popover => {
+        if (document.body.contains(popover)) {
+          document.body.removeChild(popover);
+        }
+      });
+
+        // 为每个函数调用元素添加交互事件
+        functionCalls.forEach(el => {
+          // 添加点击事件
+          el.onclick = (event) => {
+            const funcName = el.getAttribute('data-function');
+            if (funcName && functionDefinitions.value[funcName]) {
+              console.log('点击函数调用:', funcName);
+              jumpToFunction(funcName);
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          };
+
+          // 添加键盘导航
+          el.setAttribute('tabindex', '0');
+          el.setAttribute('role', 'button');
+          el.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              const funcName = el.getAttribute('data-function');
+              if (funcName) {
+                jumpToFunction(funcName);
+                event.preventDefault();
+              }
+            }
+          });
+
+          // 添加鼠标悬停事件
+          el.addEventListener('mouseenter', function(event) {
+            const funcName = el.getAttribute('data-function');
+            if (!funcName) return;
+
+            // 获取元素位置
+            const rect = el.getBoundingClientRect();
+
+            // 创建方块形弹窗
+            const popover = document.createElement('div');
+            popover.className = 'custom-code-popover';
+
+            // 设置弹窗样式 - Dracula风格
+            popover.style.cssText = `
+              position: fixed;
+              z-index: 9999;
+              width: 700px;
+              height: 600px;
+              background-color: #282a36;
+              border: 1px solid #44475a;
+              border-radius: 6px;
+              box-shadow: 0 4px 25px rgba(0, 0, 0, 0.6);
+              overflow: hidden;
+              display: flex;
+              flex-direction: column;
+              font-family: 'Operator Mono', 'SF Mono', 'Source Code Pro', monospace;
+            `;
+
+            // 计算位置 - 使用更大的尺寸
+            let topPos = rect.top - 610; // 向上增加空间，考虑更大尺寸
+            let leftPos = Math.max(10, rect.left - 200); // 左移，增加左侧空间
+
+            // 调整位置避免超出视口
+            if (topPos < 10) topPos = Math.min(window.innerHeight - 610, rect.bottom + 10);
+            if (leftPos + 700 > window.innerWidth) leftPos = window.innerWidth - 710;
+
+            // 如果弹窗放不下，则缩小尺寸适应屏幕
+            const maxHeight = window.innerHeight - 20;
+            const height = Math.min(600, maxHeight);
+
+            // 设置位置和大小
+            popover.style.top = `${topPos}px`;
+            popover.style.left = `${leftPos}px`;
+            popover.style.height = `${height}px`;
+
+            // 创建加载中内容
+            popover.innerHTML = `
+              <div style="
+                height: 40px;
+                background-color: #282a36;
+                color: #50fa7b;
+                font-weight: bold;
+                border-bottom: 1px solid #44475a;
+                padding: 8px 12px;
+                font-size: 15px;
+                display: flex;
+                align-items: center;
+              ">函数定义: ${escapeHtml(funcName)}
+                <div style="
+                  margin-left: auto;
+                  width: 24px;
+                  height: 24px;
+                  border: 3px solid #44475a;
+                  border-top-color: #50fa7b;
+                  border-radius: 50%;
+                  animation: popover-spinner 1s linear infinite;
+                "></div>
+                <style>
+                  @keyframes popover-spinner {
+                    to { transform: rotate(360deg); }
+                  }
+                </style>
+              </div>
+              <div style="
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #f8f8f2;
+                background-color: #282a36;
+                font-size: 15px;
+              ">加载函数定义中...</div>
+            `;
+
+            // 添加到DOM
+            document.body.appendChild(popover);
+
+            // 保存弹窗引用
+            el._popover = popover;
+
+            // 处理鼠标离开
+            const handleMouseLeave = function(evt) {
+              // 检查是否移动到弹窗上
+              if (evt.relatedTarget === popover ||
+                  (popover.contains(evt.relatedTarget))) {
+                return;
+              }
+
+              // 添加过渡动画
+              popover.style.transition = 'opacity 0.2s ease-out';
+              popover.style.opacity = '0';
+
+              // 延迟删除弹窗
+              setTimeout(() => {
+                if (document.body.contains(popover)) {
+                  document.body.removeChild(popover);
+                }
+              }, 200);
+
+              // 移除事件监听
+              el.removeEventListener('mouseleave', handleMouseLeave);
+              popover.removeEventListener('mouseleave', handleMouseLeave);
+            };
+
+            // 添加鼠标离开监听
+            el.addEventListener('mouseleave', handleMouseLeave);
+            popover.addEventListener('mouseleave', handleMouseLeave);
+
+            // 异步加载函数定义
+            findFunctionDefinition(funcName).then(definitionCode => {
+              if (document.body.contains(popover)) {
+                // 渐入效果
+                popover.style.opacity = '0';
+                popover.innerHTML = generateCodeDisplay(definitionCode, funcName);
+                setTimeout(() => {
+                  popover.style.transition = 'opacity 0.3s ease-in';
+                  popover.style.opacity = '1';
+                }, 10);
+              }
+            }).catch(error => {
+              console.error('加载函数定义失败:', error);
+              if (document.body.contains(popover)) {
+                popover.innerHTML = `
+                  <div style="
+                    height: 40px;
+                    background-color: #282a36;
+                    color: #ff5555;
+                    font-weight: bold;
+                    border-bottom: 1px solid #44475a;
+                    padding: 8px 12px;
+                    font-size: 15px;
+                  ">函数定义: ${escapeHtml(funcName)}</div>
+                  <div style="
+                    flex: 1;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: #f8f8f2;
+                    background-color: #282a36;
+                  ">未找到函数定义</div>
+                `;
+              }
+            });
+          });
+        });
+
+        console.log('成功初始化自定义弹窗');
+      } else {
+        console.log('未找到函数调用元素');
+        // 如果没找到元素，再尝试一次
+        setTimeout(initTooltips, 500);
+      }
+    } catch (error) {
+      console.error('初始化工具提示失败:', error);
+    }
+  }, 100);
+};
+
+// 生成代码显示HTML
+const generateCodeDisplay = (codeContent, funcName) => {
+  // 整理代码内容
+  let content = codeContent || '函数定义未找到';
+  if (content.length > 10000) {
+    content = content.substring(0, 10000) + '...(省略部分内容)';
+  }
+
+  // 分行处理
+  const codeLines = content.split('\n');
+
+  // 查找函数签名行
+  let functionSignature = '';
+  let signatureLineIndex = -1;
+  if (codeLines.length > 0) {
+    for (let i = 0; i < Math.min(8, codeLines.length); i++) {
+      if (codeLines[i].includes(`function ${funcName}`) ||
+          codeLines[i].includes(`${funcName} =`) ||
+          codeLines[i].includes(`${funcName}(`)) {
+        functionSignature = codeLines[i];
+        signatureLineIndex = i;
+        break;
+      }
+    }
+
+    // 如果没找到，使用第一行
+    if (!functionSignature) {
+      functionSignature = codeLines[0];
+      signatureLineIndex = 0;
+    }
+  }
+
+  // 不限制行数，但限制总长度
+  const displayLines = codeLines.length > 50
+    ? [...codeLines.slice(0, 50), '...(省略部分内容)']
+    : codeLines;
+
+  // 使用Prism进行代码高亮处理
+  try {
+    // 高亮完整代码，然后分行
+    const highlightedCode = Prism.highlight(
+      content,
+      Prism.languages.javascript,
+      'javascript'
+    );
+
+    // 按行分割高亮后的代码
+    const highlightedLines = highlightedCode.split('\n');
+
+    // 显示更多行
+    const displayHighlightedLines = codeLines.length > 50
+      ? [...highlightedLines.slice(0, 50), '<span class="token comment">// ...(省略部分内容)</span>']
+      : highlightedLines;
+
+    // 添加内联样式，确保代码高亮有正确颜色 - Dracula风格
+    const codeStyles = `
+      <style>
+        .custom-code-popover .token.comment { color: #6272a4; }
+        .custom-code-popover .token.keyword { color: #f38c3e; }
+        .custom-code-popover .token.string { color: #f1fa8c; }
+        .custom-code-popover .token.function { color: #50fa7b; }
+        .custom-code-popover .token.number { color: #bd93f9; }
+        .custom-code-popover .token.operator { color: #8be9fd; }
+        .custom-code-popover .token.punctuation { color: #f8f8f2; }
+        .custom-code-popover .token.parameter { color: #ffb86c; }
+        .custom-code-popover .token.class-name { color: #8be9fd; }
+        .custom-code-popover .token.boolean { color: #bd93f9; }
+        .custom-code-popover .token.property { color: #8be9fd; }
+      </style>
+    `;
+
+    // 提取函数参数
+    let paramsMatch = functionSignature.match(/\(([^)]*)\)/);
+    let params = paramsMatch ? paramsMatch[1].split(',').map(p => p.trim()).filter(Boolean) : [];
+    let formattedParams = params.length > 0 ? params.join(', ') : '';
+
+    // 构建HTML - Dracula风格
+    return `
+      ${codeStyles}
+      <div style="
+        height: 40px;
+        background-color: #282a36;
+        color: #50fa7b;
+        font-weight: bold;
+        border-bottom: 1px solid #44475a;
+        padding: 8px 12px;
+        font-size: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      ">
+        <span>函数: <span style="color: #8be9fd;">${escapeHtml(funcName || '')}</span>(<span style="color: #ffb86c;">${escapeHtml(formattedParams)}</span>)</span>
+        <span style="font-size: 13px; color: #6272a4; font-style: italic;">点击函数名跳转到定义</span>
+      </div>
+
+      <div style="
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        background-color: #282a36;
+        height: calc(100% - 40px);
+      ">
+        <div style="
+          overflow-x: auto;
+          width: 100%;
+          position: relative;
+        ">
+          ${displayHighlightedLines.map((line, index) => `
+            <div style="
+              display: flex;
+              border-bottom: 1px solid rgba(68, 71, 90, 0.3);
+              ${index === signatureLineIndex ? 'background-color: rgba(80, 250, 123, 0.07);' : ''}
+            ">
+              <span style="
+                width: 50px;
+                flex-shrink: 0;
+                text-align: right;
+                padding-right: 12px;
+                padding-left: 8px;
+                background-color: #21222c;
+                color: #6272a4;
+                border-right: 1px solid #44475a;
+                user-select: none;
+                font-family: 'SF Mono', 'JetBrains Mono', monospace;
+                font-size: 14px;
+              ">${index + 1}</span>
+              <span style="
+                padding-left: 12px;
+                padding-right: 12px;
+                color: #f8f8f2;
+                white-space: pre;
+                min-width: 600px;
+                font-family: 'Operator Mono', 'SF Mono', 'Source Code Pro', monospace;
+                font-size: 15px;
+                line-height: 1.6;
+              ">${line}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    // 如果高亮处理失败，回退到原始版本
+    console.error('代码高亮处理失败', e);
+
+    // 构建HTML - Dracula风格
+    return `
+      <div style="
+        height: 40px;
+        background-color: #282a36;
+        color: #50fa7b;
+        font-weight: bold;
+        border-bottom: 1px solid #44475a;
+        padding: 8px 12px;
+        font-size: 15px;
+      ">函数: <span style="color: #8be9fd;">${escapeHtml(funcName || '')}</span></div>
+
+      <div style="
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        height: calc(100% - 40px);
+      ">
+        <div style="
+          overflow-x: auto;
+          width: 100%;
+          position: relative;
+          background-color: #282a36;
+        ">
+          ${displayLines.map((line, index) => `
+            <div style="
+              display: flex;
+              border-bottom: 1px solid rgba(68, 71, 90, 0.3);
+              ${index === signatureLineIndex ? 'background-color: rgba(80, 250, 123, 0.07);' : ''}
+            ">
+              <span style="
+                width: 50px;
+                text-align: right;
+                padding-right: 12px;
+                padding-left: 8px;
+                background-color: #21222c;
+                color: #6272a4;
+                border-right: 1px solid #44475a;
+                user-select: none;
+                font-family: 'SF Mono', 'JetBrains Mono', monospace;
+                font-size: 14px;
+              ">${index + 1}</span>
+              <span style="
+                padding-left: 12px;
+                padding-right: 12px;
+                color: #f8f8f2;
+                white-space: pre;
+                min-width: 600px;
+                font-family: 'Operator Mono', 'SF Mono', 'Source Code Pro', monospace;
+                font-size: 15px;
+                line-height: 1.6;
+              ">${escapeHtml(line)}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+};
+
+// 查找函数定义的实现
+const findFunctionDefinition = async (funcName) => {
+  return new Promise((resolve, reject) => {
+    try {
+      // 从已存储的函数定义中获取
+      if (functionDefinitions.value[funcName]) {
+        const definition = functionDefinitions.value[funcName];
+        resolve(definition.definitionText || `函数 ${funcName} 的定义未找到`);
+      } else {
+        // 如果未找到，返回提示信息
+        resolve(`// 函数 ${funcName} 的定义未在当前文件中找到`);
+      }
+    } catch (error) {
+      console.error('获取函数定义失败:', error);
+      reject(error);
+    }
+  });
+};
+
+// HTML转义辅助函数
+const escapeHtml = (unsafe) => {
+  if (!unsafe) return '';
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+};
+
+watch(() => props.filePath, (newPath) => {
+  if (newPath) {
+    fetchFileContent(newPath);
+  }
+});
+
+// 监视代码行变化，处理函数调用高亮
+watch(() => codeLines.length, (newLength) => {
+  if (newLength > 0) {
+    console.log('代码行数变化，处理函数调用高亮');
+    // 等待DOM更新完成
+    setTimeout(() => {
+      processCodeLineHighlighting();
+    }, 100);
+  }
+});
+
+onMounted(() => {
+  const path = route.params.filePath;
+  if (path) {
+    fetchFileContent(path);
+  }
+
+  // 添加全局函数供内联事件调用
+  window.jumpToFunctionDef = (funcName) => {
+    console.log('直接调用跳转函数:', funcName);
+    jumpToFunction(funcName);
+    return false; // 阻止默认行为
+  };
+
+  // 确保函数调用高亮处理
+  setTimeout(() => {
+    processCodeLineHighlighting();
+  }, 1000);
+
+  // 不再需要提前获取控制台元素
+});
+</script>
+
+<template>
+  <div class="code-viewer">
+    <div class="code-header">
+      <h2 v-if="fileName">{{ fileName }}</h2>
+      <div class="code-actions">
+        <el-button type="primary" :icon="VideoPlay" :loading="isExecuting" @click="runCode">
+          运行全部代码
+        </el-button>
+        <el-button :icon="Download" @click="downloadCode">
+          下载
+        </el-button>
+        <el-button :icon="Share" @click="shareCode">
+          分享
+        </el-button>
+      </div>
+    </div>
+
+    <div class="code-container" v-loading="isLoading">
+      <div v-if="codeLines.length > 0" class="code-content">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=SF+Mono:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+        <!-- 逐行渲染代码 -->
+        <div v-for="line in codeLines" :key="line.index" class="code-line-wrapper">
+          <!-- 代码行 -->
+          <div class="code-line" :class="{ 'target-highlight': line.index === highlightedLine }">
+            <span class="line-number">{{ line.index + 1 }}</span>
+            <!-- 使用计算属性处理高亮 -->
+            <span class="line-content" ref="codeLineContent" v-html="getHighlightedLine(line.text)"></span>
+          </div>
+
+          <!-- 如果是代码块结束行，添加运行框和输出区域 -->
+          <div v-if="line.isCodeBlockEnd" class="run-frame">
+            <el-button
+              class="run-line-btn"
+              type="success"
+              size="small"
+              :loading="lineOutputs[line.index]?.loading"
+              @click="runCodeBlock(line.index)">
+              运行此代码块
+            </el-button>
+
+            <div
+              class="line-output"
+              :class="lineOutputs[line.index]?.status">
+              <!-- 加载状态 -->
+              <div v-if="lineOutputs[line.index]?.loading" class="loading-indicator">
+                执行中...
+              </div>
+
+              <!-- 空输出状态 -->
+              <div v-else-if="lineOutputs[line.index]?.logs.length === 0" class="empty-output">
+                运行后查看输出
+              </div>
+
+              <!-- 输出日志 -->
+              <div
+                v-else
+                v-for="(log, logIndex) in lineOutputs[line.index]?.logs"
+                :key="`${line.index}-${logIndex}`"
+                class="log-line"
+                :class="log.type">
+                <span v-if="log.type === 'error'" class="error-icon">⚠</span>
+                <span v-if="log.type === 'warn'" class="warn-icon">⚠</span>
+                <span v-if="log.type === 'info'" class="info-icon">ℹ</span>
+                {{ log.content }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-else class="empty-state">
+        请从左侧选择一个文件查看
+      </div>
+    </div>
+
+    <div class="resize-handle" @mousedown="startDrag">
+      <div class="handle-bar"></div>
+    </div>
+
+    <div class="console-container" ref="consoleEl" :class="outputClass" :style="{ height: `${consoleHeight}px` }">
+      <div class="console-header">
+        <div class="console-title">
+          <h3>全局控制台输出</h3>
+          <el-button
+            class="toggle-console-btn"
+            size="small"
+            :icon="consoleHeight < 50 ? CaretTop : CaretBottom"
+            @click="toggleConsole">
+            {{ consoleHeight < 50 ? '展开' : '折叠' }}
+          </el-button>
+        </div>
+        <el-button size="small" @click="consoleOutput = []">清空</el-button>
+      </div>
+      <div class="console-output">
+        <div v-if="consoleOutput.length === 0" class="console-empty">
+          <p>运行代码后查看输出结果</p>
+        </div>
+        <div v-for="(log, index) in consoleOutput" :key="index"
+             class="console-line" :class="log.type">
+          <span v-if="log.type === 'error'" class="error-icon">⚠</span>
+          <span v-if="log.type === 'warn'" class="warn-icon">⚠</span>
+          <span v-if="log.type === 'info'" class="info-icon">ℹ</span>
+          {{ log.content }}
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.code-viewer {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #282a36;
+  color: #f8f8f2;
+  overflow: hidden;
+}
+
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: linear-gradient(135deg, #2b2b3d, #353555);
+  border-bottom: 1px solid #414558;
+}
+
+.code-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #50fa7b;
+  text-shadow: 0 0 8px rgba(80, 250, 123, 0.4);
+}
+
+.code-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.code-container {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  background-color: #282a36;
+  position: relative;
+  height: 100%; /* 确保容器占满可用高度 */
+}
+
+.code-content {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+  padding: 8px;
+  background-color: #282a36;
+  border-radius: 4px;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+}
+
+.code-line-wrapper {
+  margin-bottom: 4px;
+}
+
+.code-line {
+  display: flex;
+  white-space: pre;
+}
+
+.line-number {
+  width: 3em;
+  text-align: right;
+  padding-right: 1em;
+  color: #6272a4;
+  user-select: none;
+}
+
+.line-content {
+  flex: 1;
+}
+
+/* 函数调用高亮样式 - 使用Element Plus风格 */
+:deep(.function-call-highlight) {
+  color: #409eff !important;
+  cursor: pointer;
+  font-weight: normal;
+  padding: 0 2px;
+  border-radius: 2px;
+  transition: all 0.2s ease;
+  border-bottom: 1px dashed #409eff;
+  position: relative;
+  text-decoration: none;
+  outline: none;
+}
+
+:deep(.function-call-highlight:hover),
+:deep(.function-call-highlight:focus) {
+  color: #409eff !important;
+  background-color: rgba(64, 158, 255, 0.1);
+  border-bottom: 1px solid #409eff;
+  box-shadow: 0 2px 4px rgba(64, 158, 255, 0.1);
+}
+
+:deep(.function-call-highlight:focus-visible) {
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.4);
+}
+
+/* 目标行高亮样式 */
+.code-line.target-highlight {
+  background-color: rgba(80, 250, 123, 0.2);
+  animation: highlight-pulse 2s ease;
+}
+
+@keyframes highlight-pulse {
+  0%, 100% { background-color: rgba(80, 250, 123, 0); }
+  50% { background-color: rgba(80, 250, 123, 0.2); }
+}
+
+.run-frame {
+  margin: 4px 0 12px 3em;
+  padding: 8px 12px;
+  background-color: #21222c;
+  border-left: 3px solid #50fa7b;
+  border-radius: 0 4px 4px 0;
+}
+
+.run-line-btn {
+  margin-bottom: 8px;
+}
+
+.line-output {
+  padding: 8px;
+  background-color: #282a36;
+  border-radius: 4px;
+  min-height: 30px;
+}
+
+.line-output.success {
+  border-left: 3px solid #50fa7b;
+}
+
+.line-output.error {
+  border-left: 3px solid #ff5555;
+}
+
+.loading-indicator {
+  color: #6272a4;
+  font-style: italic;
+  text-align: center;
+}
+
+.empty-output {
+  color: #6272a4;
+  font-style: italic;
+  text-align: center;
+}
+
+.log-line {
+  padding: 4px 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.log-line.error {
+  color: #ff5555;
+  background-color: rgba(255, 85, 85, 0.1);
+  padding: 8px;
+  border-radius: 4px;
+  margin: 4px 0;
+}
+
+.log-line.warn {
+  color: #ffb86c;
+  background-color: rgba(255, 184, 108, 0.1);
+  padding: 6px;
+  border-radius: 4px;
+  margin: 4px 0;
+}
+
+.log-line.info {
+  color: #8be9fd;
+  background-color: rgba(139, 233, 253, 0.1);
+  padding: 6px;
+  border-radius: 4px;
+  margin: 4px 0;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #6272a4;
+  font-style: italic;
+}
+
+.resize-handle {
+  height: 8px;
+  background-color: transparent;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 10;
+}
+
+.resize-handle:hover {
+  background-color: rgba(65, 69, 88, 0.2);
+}
+
+.resize-handle .handle-bar {
+  width: 40px;
+  height: 3px;
+  background-color: #6272a4;
+  border-radius: 3px;
+}
+
+.resize-handle:hover .handle-bar {
+  background-color: #8be9fd;
+  width: 50px;
+}
+
+.console-container {
+  display: flex;
+  flex-direction: column;
+  background-color: #1d1e27;
+  border-top: 1px solid #414558;
+  transition: height 0.3s, border-color 0.3s, box-shadow 0.3s;
+  overflow: hidden;
+}
+
+.console-container.success {
+  border-top-color: #50fa7b;
+  box-shadow: 0 -2px 10px rgba(80, 250, 123, 0.2);
+}
+
+.console-container.error {
+  border-top-color: #ff5555;
+  box-shadow: 0 -2px 10px rgba(255, 85, 85, 0.2);
+}
+
+.console-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background-color: #21222c;
+  min-height: 36px;
+}
+
+.console-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.console-header h3 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #bd93f9;
+}
+
+.console-output {
+  flex: 1;
+  padding: 8px 16px;
+  overflow-y: auto;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.9rem;
+}
+
+.console-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6272a4;
+  font-style: italic;
+}
+
+.console-line {
+  padding: 4px 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.console-line.log {
+  color: #f8f8f2;
+}
+
+.console-line.error {
+  color: #ff5555;
+  background-color: rgba(255, 85, 85, 0.1);
+  padding: 8px;
+  border-radius: 4px;
+  margin: 4px 0;
+}
+
+.console-line.warn {
+  color: #ffb86c;
+  background-color: rgba(255, 184, 108, 0.1);
+  padding: 6px;
+  border-radius: 4px;
+  margin: 4px 0;
+}
+
+.console-line.info {
+  color: #8be9fd;
+  background-color: rgba(139, 233, 253, 0.1);
+  padding: 6px;
+  border-radius: 4px;
+  margin: 4px 0;
+}
+
+.error-icon, .warn-icon, .info-icon {
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 1.1rem;
+}
+
+:deep(.el-button) {
+  background: linear-gradient(135deg, #44475a, #383a59);
+  border-color: #6272a4;
+  color: #f8f8f2;
+}
+
+:deep(.el-button:hover) {
+  background: linear-gradient(135deg, #50536a, #444669);
+  border-color: #8be9fd;
+  box-shadow: 0 0 10px rgba(139, 233, 253, 0.4);
+}
+
+:deep(.el-button--primary) {
+  background: linear-gradient(135deg, #8be9fd, #50fa7b);
+  border-color: #50fa7b;
+  color: #282a36;
+}
+
+:deep(.el-button--primary:hover) {
+  background: linear-gradient(135deg, #9df0ff, #69ff95);
+  border-color: #69ff95;
+  box-shadow: 0 0 10px rgba(80, 250, 123, 0.6);
+}
+
+:deep(.el-button--success) {
+  background: linear-gradient(135deg, #50fa7b, #8be9fd);
+  border-color: #50fa7b;
+  color: #282a36;
+}
+
+:deep(.el-button--success:hover) {
+  background: linear-gradient(135deg, #69ff95, #9df0ff);
+  border-color: #69ff95;
+  box-shadow: 0 0 10px rgba(80, 250, 123, 0.6);
+}
+
+/* 阻止文本选择 */
+:deep(.no-select) {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  pointer-events: none !important;
+}
+
+/* 代码提示工具样式 - Element Plus风格 */
+:deep(.tippy-box[data-theme~='light']) {
+  background-color: #282a36;
+  border: 1px solid #414558;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  color: #f8f8f2;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 0;
+  /* 尺寸在JS中设置，这里不再限制 */
+}
+
+:deep(.tippy-box[data-theme~='light'] .tippy-content) {
+  padding: 0;
+  height: 100%;
+}
+
+/* 重置可能干扰JS尺寸设置的样式 */
+:deep(.tippy-box) {
+  transform: none !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+/* 正方形工具提示样式 */
+:deep(.square-tooltip) {
+  aspect-ratio: 1 / 1 !important;
+  display: block !important;
+  transform: none !important;
+}
+
+:deep(.square-tooltip .tippy-content) {
+  aspect-ratio: 1 / 1 !important;
+  height: 100% !important;
+}
+
+:deep(.square-tooltip .tippy-arrow) {
+  transform: none !important;
+}
+
+/* 代码语法高亮 - 暗色主题 */
+:deep(.code-tooltip .token.comment) { color: #6272a4; }
+:deep(.code-tooltip .token.keyword) { color: #ff79c6; }
+:deep(.code-tooltip .token.string) { color: #f1fa8c; }
+:deep(.code-tooltip .token.function) { color: #50fa7b; }
+:deep(.code-tooltip .token.number) { color: #bd93f9; }
+:deep(.code-tooltip .token.operator) { color: #ff79c6; }
+:deep(.code-tooltip .token.punctuation) { color: #f8f8f2; }
+:deep(.code-tooltip .token.parameter) { color: #ffb86c; }
+:deep(.code-tooltip .token.class-name) { color: #8be9fd; }
+:deep(.code-tooltip .token.boolean) { color: #bd93f9; }
+
+/* 箭头样式 */
+:deep(.tippy-arrow) {
+  color: #282a36;
+}
+
+:deep(.tippy-box[data-theme~='light'] .tippy-arrow::before) {
+  border-color: #414558;
+}
+
+:deep(.tippy-box[data-theme~='light'][data-placement^='top'] > .tippy-arrow::before) {
+  border-top-color: #414558;
+}
+
+/* 添加编辑器风格 */
+:deep(.el-popover.el-popper.is-light) {
+  --el-popover-padding: 0;
+  --el-popover-border-radius: 4px;
+  --el-popover-border-color: #414558;
+  --el-popover-bg-color: #282a36;
+  border-color: var(--el-popover-border-color);
+  background-color: var(--el-popover-bg-color);
+  border-radius: var(--el-popover-border-radius);
+}
+
+/* 添加更好的代码块样式 */
+:deep(.code-tooltip-wrapper) {
+  position: relative;
+  padding: 0;
+  border-radius: 6px;
+  background-color: #282a36;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  /* 添加一些视觉效果增强方形感知 */
+  border: 1px solid #414558;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.3);
+}
+
+/* 方块式布局样式 */
+:deep(.code-tooltip-wrapper.block-display) {
+  width: 400px !important;
+  height: 400px !important;
+  max-width: 400px !important;
+  max-height: 400px !important;
+  aspect-ratio: 1 / 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+:deep(.code-tooltip) {
+  position: relative;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Courier New', monospace;
+  color: #f8f8f2;
+  white-space: pre-wrap; /* 允许在单词之间自动换行 */
+  word-wrap: break-word; /* 允许长单词换行 */
+  word-break: break-all; /* 强制在任何字符处换行 */
+  tab-size: 2;
+  -moz-tab-size: 2;
+  flex: 1;
+  overflow: auto;
+  margin-top: 36px;
+  padding: 8px 16px;
+  width: calc(100% - 32px);
+  height: calc(100% - 60px);
+  box-sizing: border-box;
+}
+
+/* 添加代码块标题 */
+:deep(.code-tooltip-wrapper)::before {
+  content: attr(data-filename, 'Function Definition');
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 8px 16px;
+  height: 36px;
+  background-color: #1d1e27;
+  color: #50fa7b;
+  font-size: 0.85rem;
+  font-weight: bold;
+  border-bottom: 1px solid #414558;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  box-sizing: border-box;
+  z-index: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 方块式代码展示 */
+:deep(.function-signature) {
+  padding: 8px 10px;
+  background-color: #1d1e27;
+  color: #ff79c6;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Courier New', monospace;
+  font-size: 14px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid #414558;
+  margin-top: 36px;
+}
+
+:deep(.code-blocks) {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  max-height: 320px;
+  padding: 0;
+  margin: 0;
+  background-color: #282a36;
+}
+
+:deep(.code-blocks.square-layout) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+  margin: 0;
+  background-color: #282a36;
+  height: calc(100% - 70px);
+  max-height: none;
+}
+
+:deep(.code-block-line) {
+  display: flex;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Courier New', monospace;
+  font-size: 13px;
+  padding: 0;
+  margin: 0;
+  line-height: 1.5;
+  border-bottom: 1px solid rgba(65, 69, 88, 0.2);
+}
+
+:deep(.line-number) {
+  display: inline-block;
+  width: 30px;
+  text-align: right;
+  padding: 0 8px 0 4px;
+  color: #6272a4;
+  border-right: 1px solid #414558;
+  background-color: #252733;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+:deep(.line-content) {
+  padding-left: 8px;
+  padding-right: 8px;
+  color: #f8f8f2;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-grow: 1;
+}
+
+/* 确保拖拽时不选择文本 */
+:deep(.no-select),
+:deep(.no-select *) {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  cursor: ns-resize !important;
+}
+</style>

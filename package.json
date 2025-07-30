@@ -1,0 +1,27 @@
+{
+  "name": "algorithm-visualizer",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/copy-files.js",
+    "preview": "vite preview",
+    "deploy": "gh-pages -d dist --add",
+    "deploy:force": "gh-pages -d dist -f --add"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.1",
+    "element-plus": "^2.10.2",
+    "pinia": "^3.0.3",
+    "prismjs": "^1.30.0",
+    "tippy.js": "^6.3.7",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.3",
+    "gh-pages": "^6.3.0",
+    "vite": "^6.3.5"
+  }
+}
